@@ -1,0 +1,200 @@
+---
+title: "North Atlanic Operating Model"
+author: "Laurence Kell"
+date: "26/03/2015"
+output: html_document
+---
+
+```{r, echo=FALSE}
+library(knitr)
+
+opts_chunk$set(comment=NA, 
+               fig.width =6, 
+               fig.height=6,
+               fig.path  ="../tex/",
+               warning=FALSE, 
+               message=FALSE, 
+               error  =FALSE, 
+               echo   =FALSE, 
+               eval   =TRUE,
+               cache  =TRUE)
+```
+
+```{r, echo=FALSE}
+library(FLCore)
+library(ggplotFL)
+library(plyr)
+library(reshape)
+library(FLBRP)
+library(biodyn)
+library(scales)
+
+theme_set(theme_bw(10))
+```
+
+```{r}
+dirMy ="/home/laurie/Desktop/MEGAsync/iccat-mse"
+dirDat=paste(dirMy,"/data",sep="")
+
+load(paste(dirDat,"alb.RData",sep="/"))
+```
+
+
+```{ralb-om,fig.width=8}
+ggplot(ldply(alb, function(x) as.data.frame(FLQuants(x,
+                              Recruits=rec,
+                              SSB     =ssb,
+                              Biomass =stock,
+                              F       =fbar,
+                              Fapex   =fapex,
+                              Catch   =catch))))+
+         geom_line(aes(year,data,col=.id))+
+         facet_grid(qname~.,scale="free_y")+
+         theme_bw(10)
+```
+
+**Figure** Time series of recruits, SSB, biomass, mean F, F apex and Catch
+
+```{ralb-om-sr}
+srs=FLSRs(llply(alb,as.FLSR,model="bevholt"))
+srs=FLSRs(llply(srs, fmle,control=list(silent=TRUE)))
+names(srs)=names(alb)
+
+theme_set(theme_bw(10))
+
+plot(srs[[9]])
+```
+
+**Figure**  Stock recruitment fit with diagnostics for base case.
+
+```{ralb-om-eql,fig.width=8}
+brs=FLBRPs(mlply(names(srs),function(i) 
+  brp(FLBRP(alb[[i]],sr=srs[[i]],nyears=dims(alb[[i]])$year))))
+names(brs)=names(alb)
+plot(brs,refpts=FALSE)+theme_bw(10)
+
+save(brs,file=paste(dirDat,"brs.RData",sep="/"))
+```
+
+**Figure**  Equilibrium curves
+
+```{ralb-om-prd,fig.height=4}
+bd=biodyn:::FLBRP2biodyn(brs[["Base"]])
+bd=fwd(bd,catch=catch(bd)[,-c(1,82)])
+
+fbar(brs[["Base"]])=fbar(brs[["Base"]])/max(fbar(brs[["Base"]]))*.5
+brs[["Base"]]=brp(brs[["Base"]])
+
+dat=model.frame(FLQuants(bd,"stock","catch"))
+
+plotPrd(bd)+
+  geom_path( aes(stock,catch),data=dat)+
+  geom_path(aes(stock,catch),
+            data=model.frame(FLQuants(bd,"stock","catch")))+
+  geom_path(aes(stock,catch),
+             data=subset(model.frame(FLQuants(brs[["Base"]],"stock","catch")),
+                         stock>0),col="blue")+
+  theme_bw(10)
+```
+
+**Figure** Production functions
+
+```{ralb-om-mp}
+fapexAge<-function(object){
+  tmp=harvest(object)
+  tmp[]=fapex(object)
+  tmp=FLQuant(ages(tmp)[harvest(object)==tmp],
+              dimnames=dimnames(fapex(object)))
+  tmp}
+
+
+dat=
+  rbind.fill(cbind(What="MP", as.data.frame(FLQuants(bd,      "catch","harvest","stock"))),
+             cbind(What="OM", as.data.frame(FLQuants(alb[["Base"]],"catch","harvest"=function(x)
+               catch(x)/stock(x),"stock"))))
+
+ggplot(dat)+geom_line(aes(year,data,col=What))+
+  facet_grid(qname~.,scale="free")
+```
+
+**Figure** Simulation for biomass production function
+
+
+```{r}
+bry=brs[["Base"]]
+landings.sel(bry)=propagate(iter(landings.sel(bry),1),82)
+landings.sel(bry)[]=harvest(alb[["Base"]])
+
+tmp=model.frame(computeRefpts(bry)["msy",1:5])
+tmp=rbind.fill(tmp,
+          transform(as.data.frame(fapexAge(alb[["Base"]]),drop=T),
+          msy=data,iter=year-1929,quantity="Fapex Age")[,c(3:5)])
+tmp=rbind.fill(tmp,
+               transform(as.data.frame(computeRefpts(bry)["msy","biomass"]/
+                                       computeRefpts(bry)["virgin","biomass"]),
+                         msy=data,quantity="shape")[,c(2:3,5)])
+tmp=rbind.fill(tmp,
+               transform(as.data.frame(computeRefpts(bry)["msy","yield"]/
+                                       computeRefpts(bry)["msy","biomass"]),
+                         msy=data,quantity="hrate")[,c(2:3,5)])
+
+bdt=maply(1:82,function(i) biodyn:::FLBRP2biodyn(iter(bry,i))@params)
+
+bdt=melt(bdt)
+names(bdt)=c("iter","quantity","msy")
+bdt=rbind(tmp,bdt)
+names(bdt)[1]="data"
+```
+
+```{ralb-om-bench1,fig.width=8}
+ggplot(bdt)+
+  geom_line(aes(as.numeric(as.numeric(iter)+1929),data))+
+  facet_wrap(~quantity,scale="free",ncol=2)+
+  xlab("Year")+ylab("MSY Benchmarks")+
+  theme_bw(10)
+```
+
+**Figure** Time series of benchmarks
+
+
+```{ralb-om-bench2,fig.width=8}
+ggplot(ddply(subset(bdt,!(quantity%in%c("Fapex Age","b0","p"))),
+        .(quantity), transform, data=(data-mean(data))/mean(data)))+
+  geom_line(aes(as.numeric(as.numeric(iter)+1929),data))+
+  facet_wrap(~quantity,scale="free",ncol=2)+
+  xlab("Year")+ylab("MSY Benchmarks")+
+  theme_bw(10)+
+  scale_y_continuous(labels=percent)+
+  geom_hline(aes(yintercept=0),col="grey")
+```
+
+**Figure** Time series of MSY benchmarks
+
+```{r}
+source('~/Desktop/flr/git/FLBRP/R/FLBRP-production.R')
+```
+
+```{r}
+res1=production(object=brs[[9]])
+```
+
+```{r}
+res2=production(object=brs[[9]],alb[[9]])
+```
+
+```{r,fig.width=8,fig.height=4}
+ggplot(res1)+geom_line( aes(year,hat))+
+             geom_point(aes(year,obs))+
+             geom_line( aes(year,hat),data=res2,col="red")+
+  theme_bw()   
+```
+
+**Figure** Surplus production, lines are expected values (red is the non-stationary function) and points are the observered values.
+
+```{r,fig.width=8,fig.height=4}
+dat=merge(res1,as.data.frame(rec(alb[[9]]),drop=T))
+names(dat)[c(4,6)]=c("Production","Recruitment")
+with(dat,ccf(Recruitment,Production))
+```
+
+**Figure** Cross correlation between production and recruitment, showing production is driven by recruitment 5 to 10 years earlier.
