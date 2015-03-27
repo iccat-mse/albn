@@ -28,12 +28,13 @@ library(reshape)
 library(FLBRP)
 library(biodyn)
 library(scales)
+library(lh)
 
 theme_set(theme_bw(10))
 ```
 
 ```{r}
-dirMy ="/home/laurie/Desktop/MEGAsync/iccat-mse"
+dirMy ="/home/laurie/Desktop/MEGAsync/mse/albn"
 dirDat=paste(dirMy,"/data",sep="")
 
 load(paste(dirDat,"alb.RData",sep="/"))
@@ -138,7 +139,7 @@ tmp=rbind.fill(tmp,
                                        computeRefpts(bry)["msy","biomass"]),
                          msy=data,quantity="hrate")[,c(2:3,5)])
 
-bdt=maply(1:82,function(i) biodyn:::FLBRP2biodyn(iter(bry,i))@params)
+bdt=maply(1:82,function(i) biodyn:::FLBRP2biodyn(iter(bry,i))@params[c("r","k","p")])
 
 bdt=melt(bdt)
 names(bdt)=c("iter","quantity","msy")
@@ -154,11 +155,11 @@ ggplot(bdt)+
   theme_bw(10)
 ```
 
-**Figure** Time series of benchmarks
+**Figure** Time series  of production parameters
 
 
 ```{ralb-om-bench2,fig.width=8}
-ggplot(ddply(subset(bdt,!(quantity%in%c("Fapex Age","b0","p"))),
+ggplot(ddply(subset(bdt,!(quantity%in%c("Fapex Age","p"))),
         .(quantity), transform, data=(data-mean(data))/mean(data)))+
   geom_line(aes(as.numeric(as.numeric(iter)+1929),data))+
   facet_wrap(~quantity,scale="free",ncol=2)+
@@ -168,19 +169,26 @@ ggplot(ddply(subset(bdt,!(quantity%in%c("Fapex Age","b0","p"))),
   geom_hline(aes(yintercept=0),col="grey")
 ```
 
-**Figure** Time series of MSY benchmarks
+**Figure** Relative time series of production parameters
 
 ```{r}
 source('~/Desktop/flr/git/FLBRP/R/FLBRP-production.R')
 ```
 
-```{r}
+
+```{r,fig.width=8,fig.height=4}
 res1=production(object=brs[[9]])
+res2=production(object=brs[[9]],alb[[9]])
+
+dat=merge(res1,as.data.frame(rec(alb[[9]]),drop=T))
+names(dat)[c(4,6)]=c("Production","Recruitment")
+
+ggplot(dat)+geom_point(aes(year,Recruitment))+
+  theme_bw()
 ```
 
-```{r}
-res2=production(object=brs[[9]],alb[[9]])
-```
+**Figure** Recruitment
+
 
 ```{r,fig.width=8,fig.height=4}
 ggplot(res1)+geom_line( aes(year,hat))+
@@ -191,9 +199,38 @@ ggplot(res1)+geom_line( aes(year,hat))+
 
 **Figure** Surplus production, lines are expected values (red is the non-stationary function) and points are the observered values.
 
+
 ```{r,fig.width=8,fig.height=4}
-dat=merge(res1,as.data.frame(rec(alb[[9]]),drop=T))
-names(dat)[c(4,6)]=c("Production","Recruitment")
+acf(dat$Recruitment)
+```
+
+**Figure** ACF for recruitment
+
+```{r,fig.width=8,fig.height=4,eval=FALSE}
+ggplot(spectra(dat$Recruitment))+
+  geom_point(aes(f,mx))+
+  theme_bw()
+
+**Figure** Spectra for recruitment
+```
+
+```{r,fig.width=8,fig.height=4}
+acf(dat$Production)
+```
+
+**Figure** ACF for production
+
+
+```{r,fig.width=8,fig.height=4,eval=FALSE}
+ggplot(spectra(dat$Production))+
+  geom_point(aes(f,mx))+
+  theme_bw()
+
+**Figure** Spectra for production
+```
+
+
+```{r,fig.width=8,fig.height=4}
 with(dat,ccf(Recruitment,Production))
 ```
 
