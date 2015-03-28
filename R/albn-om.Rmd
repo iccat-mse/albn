@@ -1,5 +1,6 @@
 ---
-title: "North Atlanic Operating Model"
+title: "North Atlanic Alnbacore"
+subtitle: "Operating Model"
 author: "Laurence Kell"
 date: "26/03/2015"
 output: html_document
@@ -34,7 +35,7 @@ theme_set(theme_bw(10))
 ```
 
 ```{r}
-dirMy ="/home/laurie/Desktop/MEGAsync/mse/albn"
+dirMy ="/home/laurie/MEGAsync/mse/albn"
 dirDat=paste(dirMy,"/data",sep="")
 
 load(paste(dirDat,"alb.RData",sep="/"))
@@ -54,19 +55,17 @@ ggplot(ldply(alb, function(x) as.data.frame(FLQuants(x,
          theme_bw(10)
 ```
 
-**Figure** Time series of recruits, SSB, biomass, mean F, F apex and Catch
+**Figure 1** Time series of recruits, SSB, biomass, mean F, F apex and Catch
 
 ```{ralb-om-sr}
 srs=FLSRs(llply(alb,as.FLSR,model="bevholt"))
 srs=FLSRs(llply(srs, fmle,control=list(silent=TRUE)))
 names(srs)=names(alb)
 
-theme_set(theme_bw(10))
-
 plot(srs[[9]])
 ```
 
-**Figure**  Stock recruitment fit with diagnostics for base case.
+**Figure 2**  Stock recruitment fit with diagnostics for base case.
 
 ```{ralb-om-eql,fig.width=8}
 brs=FLBRPs(mlply(names(srs),function(i) 
@@ -77,7 +76,26 @@ plot(brs,refpts=FALSE)+theme_bw(10)
 save(brs,file=paste(dirDat,"brs.RData",sep="/"))
 ```
 
-**Figure**  Equilibrium curves
+**Figure 3**  Equilibrium curves
+
+
+```{ralb-om-biol,fig.width=8}
+names(brs)=names(alb)
+biol=ldply(brs, function(x) as.data.frame(x[["catch.sel","m","mat","stock.wt"]]))
+biol=transform(biol,
+               Quantity=factor(qname,labels=c("Selectivity","M","Maturity","Mass")),
+               .id     =names(alb)[X1])
+ggplot(biol)+
+  geom_line(aes(age,data,group=.id,col=.id))+ 
+  facet_wrap(~Quantity,scale="free_y")+ 
+  theme_bw()+
+  scale_colour_discrete(name="Scenario")+
+  xlab("Age") +ylab("")
+```
+
+**Figure 4**  Future parameter vectors
+
+# Comparison with biomass dynamic model
 
 ```{ralb-om-prd,fig.height=4}
 bd=biodyn:::FLBRP2biodyn(brs[["Base"]])
@@ -98,7 +116,8 @@ plotPrd(bd)+
   theme_bw(10)
 ```
 
-**Figure** Production functions
+**Figure 5** Comparison of age based and Pella Tomlonson production functions.
+
 
 ```{ralb-om-mp}
 fapexAge<-function(object){
@@ -118,7 +137,7 @@ ggplot(dat)+geom_line(aes(year,data,col=What))+
   facet_grid(qname~.,scale="free")
 ```
 
-**Figure** Simulation for biomass production function
+**Figure 6** Simulation with biomass production function
 
 
 ```{r}
@@ -151,11 +170,11 @@ names(bdt)[1]="data"
 ggplot(bdt)+
   geom_line(aes(as.numeric(as.numeric(iter)+1929),data))+
   facet_wrap(~quantity,scale="free",ncol=2)+
-  xlab("Year")+ylab("MSY Benchmarks")+
+  xlab("Year")+ylab("")+
   theme_bw(10)
 ```
 
-**Figure** Time series  of production parameters
+**Figure 7** Time series of population parameters
 
 
 ```{ralb-om-bench2,fig.width=8}
@@ -163,13 +182,13 @@ ggplot(ddply(subset(bdt,!(quantity%in%c("Fapex Age","p"))),
         .(quantity), transform, data=(data-mean(data))/mean(data)))+
   geom_line(aes(as.numeric(as.numeric(iter)+1929),data))+
   facet_wrap(~quantity,scale="free",ncol=2)+
-  xlab("Year")+ylab("MSY Benchmarks")+
+  xlab("Year")+ylab("")+
   theme_bw(10)+
   scale_y_continuous(labels=percent)+
   geom_hline(aes(yintercept=0),col="grey")
 ```
 
-**Figure** Relative time series of production parameters
+**Figure 8** Relative time series of population parameters
 
 ```{r}
 source('~/Desktop/flr/git/FLBRP/R/FLBRP-production.R')
@@ -183,11 +202,13 @@ res2=production(object=brs[[9]],alb[[9]])
 dat=merge(res1,as.data.frame(rec(alb[[9]]),drop=T))
 names(dat)[c(4,6)]=c("Production","Recruitment")
 
-ggplot(dat)+geom_point(aes(year,Recruitment))+
+ggplot(dat)+
+  geom_line(aes(year,Recruitment),col="grey")+
+  geom_point(aes(year,Recruitment))+
   theme_bw()
 ```
 
-**Figure** Recruitment
+**Figure 9** Recruitment in base case
 
 
 ```{r,fig.width=8,fig.height=4}
@@ -197,31 +218,23 @@ ggplot(res1)+geom_line( aes(year,hat))+
   theme_bw()   
 ```
 
-**Figure** Surplus production, lines are expected values (red is the non-stationary function) and points are the observered values.
+**Figure 10** Surplus production, lines are expected values (red is the non-stationary function) and points are the observered values. CV is `r as.integer(sd(log(res1$obs),na.rm=T)*100)` %
 
 
-```{r,fig.width=8,fig.height=4}
-acf(dat$Recruitment)
+```{r,fig.width=8,fig.height=6}
+par(mfrow=c(2,2),mar=c(2,2,4,2))
+with(dat,acf(Recruitment))
+with(dat,acf(Production))
+with(dat,ccf(Recruitment,Production))
 ```
 
-**Figure** ACF for recruitment
+**Figure 11** Auto and cross correlation for recruitment and production, showing production is driven by recruitment 5 to 10 years earlierand that although recruitment exhibits white noise there is autocorrelation in productivity.
 
 ```{r,fig.width=8,fig.height=4,eval=FALSE}
 ggplot(spectra(dat$Recruitment))+
   geom_point(aes(f,mx))+
   theme_bw()
 
-**Figure** Spectra for recruitment
-```
-
-```{r,fig.width=8,fig.height=4}
-acf(dat$Production)
-```
-
-**Figure** ACF for production
-
-
-```{r,fig.width=8,fig.height=4,eval=FALSE}
 ggplot(spectra(dat$Production))+
   geom_point(aes(f,mx))+
   theme_bw()
@@ -230,8 +243,15 @@ ggplot(spectra(dat$Production))+
 ```
 
 
-```{r,fig.width=8,fig.height=4}
-with(dat,ccf(Recruitment,Production))
+```{r-stars-rec,fig.width=8}
+source('/home/laurie/Desktop/MEGA/papers/submitted/3stocks/v3/regimeShift.R')
+
+res=rod(dat$Recruitment,dat$year)
 ```
 
-**Figure** Cross correlation between production and recruitment, showing production is driven by recruitment 5 to 10 years earlier.
+**Figure 12** Shifts in recruitment
+
+```{r-stars-prod,fig.width=8}
+res=rod(dat$Production,dat$year)
+```
+**Figure 13 ** Shifts in production
