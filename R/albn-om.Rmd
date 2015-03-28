@@ -42,7 +42,7 @@ load(paste(dirDat,"alb.RData",sep="/"))
 ```
 
 
-```{ralb-om,fig.width=8}
+```{ralbn-om,fig.width=8}
 ggplot(ldply(alb, function(x) as.data.frame(FLQuants(x,
                               Recruits=rec,
                               SSB     =ssb,
@@ -57,7 +57,7 @@ ggplot(ldply(alb, function(x) as.data.frame(FLQuants(x,
 
 **Figure 1** Time series of recruits, SSB, biomass, mean F, F apex and Catch
 
-```{ralb-om-sr}
+```{ralbn-om-sr}
 srs=FLSRs(llply(alb,as.FLSR,model="bevholt"))
 srs=FLSRs(llply(srs, fmle,control=list(silent=TRUE)))
 names(srs)=names(alb)
@@ -67,7 +67,7 @@ plot(srs[[9]])
 
 **Figure 2**  Stock recruitment fit with diagnostics for base case.
 
-```{ralb-om-eql,fig.width=8}
+```{ralbn-om-eql,fig.width=8}
 brs=FLBRPs(mlply(names(srs),function(i) 
   brp(FLBRP(alb[[i]],sr=srs[[i]],nyears=dims(alb[[i]])$year))))
 names(brs)=names(alb)
@@ -79,7 +79,7 @@ save(brs,file=paste(dirDat,"brs.RData",sep="/"))
 **Figure 3**  Equilibrium curves
 
 
-```{ralb-om-biol,fig.width=8}
+```{ralbn-om-biol,fig.width=8}
 names(brs)=names(alb)
 biol=ldply(brs, function(x) as.data.frame(x[["catch.sel","m","mat","stock.wt"]]))
 biol=transform(biol,
@@ -97,7 +97,7 @@ ggplot(biol)+
 
 # Comparison with biomass dynamic model
 
-```{ralb-om-prd,fig.height=4}
+```{ralbn-om-prd,fig.height=4}
 bd=biodyn:::FLBRP2biodyn(brs[["Base"]])
 bd=fwd(bd,catch=catch(bd)[,-c(1,82)])
 
@@ -119,7 +119,7 @@ plotPrd(bd)+
 **Figure 5** Comparison of age based and Pella Tomlonson production functions.
 
 
-```{ralb-om-mp}
+```{ralbn-om-mp}
 fapexAge<-function(object){
   tmp=harvest(object)
   tmp[]=fapex(object)
@@ -166,7 +166,7 @@ bdt=rbind(tmp,bdt)
 names(bdt)[1]="data"
 ```
 
-```{ralb-om-bench1,fig.width=8}
+```{ralbn-om-bench1,fig.width=8}
 ggplot(bdt)+
   geom_line(aes(as.numeric(as.numeric(iter)+1929),data))+
   facet_wrap(~quantity,scale="free",ncol=2)+
@@ -177,7 +177,7 @@ ggplot(bdt)+
 **Figure 7** Time series of population parameters
 
 
-```{ralb-om-bench2,fig.width=8}
+```{ralbn-om-bench2,fig.width=8}
 ggplot(ddply(subset(bdt,!(quantity%in%c("Fapex Age","p"))),
         .(quantity), transform, data=(data-mean(data))/mean(data)))+
   geom_line(aes(as.numeric(as.numeric(iter)+1929),data))+
@@ -195,7 +195,7 @@ source('~/Desktop/flr/git/FLBRP/R/FLBRP-production.R')
 ```
 
 
-```{r,fig.width=8,fig.height=4}
+```{ralbn-om-rec,fig.width=8,fig.height=4}
 res1=production(object=brs[[9]])
 res2=production(object=brs[[9]],alb[[9]])
 
@@ -211,7 +211,7 @@ ggplot(dat)+
 **Figure 9** Recruitment in base case
 
 
-```{r,fig.width=8,fig.height=4}
+```{ralbn-sp,fig.width=8,fig.height=4}
 ggplot(res1)+geom_line( aes(year,hat))+
              geom_point(aes(year,obs))+
              geom_line( aes(year,hat),data=res2,col="red")+
@@ -221,7 +221,7 @@ ggplot(res1)+geom_line( aes(year,hat))+
 **Figure 10** Surplus production, lines are expected values (red is the non-stationary function) and points are the observered values. CV is `r as.integer(sd(log(res1$obs),na.rm=T)*100)` %
 
 
-```{r,fig.width=8,fig.height=6}
+```{ralbn-om-ccf,fig.width=8,fig.height=6}
 par(mfrow=c(2,2),mar=c(2,2,4,2))
 with(dat,acf(Recruitment))
 with(dat,acf(Production))
@@ -243,7 +243,7 @@ ggplot(spectra(dat$Production))+
 ```
 
 
-```{r-stars-rec,fig.width=8}
+```{ralbn-stars-rec,fig.width=8}
 source('/home/laurie/Desktop/MEGA/papers/submitted/3stocks/v3/regimeShift.R')
 
 res=rod(dat$Recruitment,dat$year)
@@ -251,7 +251,7 @@ res=rod(dat$Recruitment,dat$year)
 
 **Figure 12** Shifts in recruitment
 
-```{r-stars-prod,fig.width=8}
+```{ralbn-stars-prod,fig.width=8}
 res=rod(dat$Production,dat$year)
 ```
 **Figure 13 ** Shifts in production
