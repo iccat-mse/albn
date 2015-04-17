@@ -1,0 +1,84 @@
+---
+title: "North Atlanic Albacore"
+subtitle: "Obeservation Error Model"
+author: "Laurence Kell"
+date: "26/03/2015"
+output: html_document
+---
+
+```{r, echo=FALSE}
+library(knitr)
+
+opts_chunk$set(comment=NA, 
+               fig.width =6, 
+               fig.height=6,
+               fig.path  ="../tex/",
+               warning=FALSE, 
+               message=FALSE, 
+               error  =FALSE, 
+               echo   =FALSE, 
+               eval   =TRUE,
+               cache  =!TRUE)
+```
+
+```{r, echo=FALSE}
+library(FLCore)
+library(ggplotFL)
+library(scales)
+library(plyr)
+library(reshape)
+library(FLBRP)
+library(biodyn)
+library(aspic)
+library(plotrix)
+library(corrplot)
+library(diags)
+
+theme_set(theme_bw(10))
+
+dirMy ="/home/laurie/MEGAsync/mse/albn"
+dirDat=paste(dirMy,"/data",sep="")
+dirInp="/home/laurie/Desktop/rfmos/iccat/kobe/Inputs/albn/2013/mfcl"
+
+source('~/Desktop/flr/git/FLMethLen/R/lk-mfcl.R')
+
+lfile=paste(dirInp,"/alt",1:7,"/length.fit",sep="")
+ffile=paste(dirInp,"/alt",1:7,"/albN.frq",  sep="")
+rfile=paste(dirInp,"/alt",1:7,"/plot.rep",  sep="")
+
+```
+
+
+```{r}
+dgs=mdply(paste(dirInp,"/alt",1:7,"/plot.rep",sep=""),
+          function(x) diags(x,"mfcl"))
+
+c("ESP_BBrec","EsFr_TR","EsFr_BBear","PRT_BB",
+  "JPN_LLtrg","JPN_LLtra","JPN_LLbyc",
+  "TAI_LL","TAI_LL","TAI_LL",
+  "KrPaCu_LL","Other_SU")
+```
+
+
+
+```{r}
+ggplot(subset(dgs,name=="flt2"))+
+          geom_point( aes(year,effDev.value,group=name,col=name))   +
+          theme_ms(14,legend.position="none")            +
+          xlab("Year") + ylab("Effort Dev")+
+          facet_grid(X1~name,scale="free_x")
+```
+
+**Figure 6** CPUE fits
+
+```{r}
+lfile=paste(dirInp,"/alt",1:7,"/length.fit",sep="")
+ffile=paste(dirInp,"/alt",1:7,"/albN.frq",  sep="")
+
+alkMFCL(lfile[1],ffile[1],1)
+
+ts=mdply(paste(dirInp,"/run",1:7,"/aspic.rdat",sep=""),
+          function(x) data.frame(biomass=dget(x)$t.series$b,
+                                 harvest=dget(x)$t.series$F.total,
+                                 year   =dget(x)$t.series$year))
+```

@@ -1,5 +1,5 @@
 ---
-title: "North Atlanic Alnbacore"
+title: "North Atlanic Albacore"
 subtitle: "Operating Model"
 author: "Laurence Kell"
 date: "26/03/2015"
@@ -30,6 +30,7 @@ library(FLBRP)
 library(biodyn)
 library(scales)
 library(lh)
+library(kobe)
 
 theme_set(theme_bw(10))
 ```
@@ -100,6 +101,12 @@ ggplot(biol)+
 ```{ralbn-om-prd,fig.height=4}
 bd=biodyn:::FLBRP2biodyn(brs[["Base"]])
 bd=fwd(bd,catch=catch(bd)[,-c(1,82)])
+
+cpue =stock(alb[["Base"]])
+catch=catch(alb[["Base"]])
+save(bd,   file="/home/laurie/MEGAsync/mse/albn/data/bd.RData")
+save(cpue, file="/home/laurie/MEGAsync/mse/albn/data/cpue.RData")
+save(catch,file="/home/laurie/MEGAsync/mse/albn/data/catch.RData")
 
 fbar(brs[["Base"]])=fbar(brs[["Base"]])/max(fbar(brs[["Base"]]))*.5
 brs[["Base"]]=brp(brs[["Base"]])
@@ -255,3 +262,64 @@ res=rod(dat$Recruitment,dat$year)
 res=rod(dat$Production,dat$year)
 ```
 **Figure 13 ** Shifts in production
+
+
+```{r}
+load(paste(dirDat,"brs.RData",sep="/"))
+
+refs=transform(ldply(brs, function(x) FLBRP:::refpts(x)["msy",1:5,drop=T]),
+               .id=names(alb)[X1])[,-1]
+
+save(refs,file=paste(dirDat,"refs.RData",sep="/"))
+
+ts=ldply(alb, function(x) model.frame(FLQuants(x,"stock","ssb","catch","fbar","rec"),drop=T))
+ts=merge(ts,refs,by=".id")
+ts=transform(ts,stock  = stock/biomass,
+                ssb    = ssb.x/ssb.y,
+                catch  = catch/yield,
+                harvest=(catch/stock)/(yield/biomass),
+                f      =harvest/harvest,
+                rec    =rec.x/rec.y)[,c(".id","year","stock","ssb","catch","harvest","f","rec")]
+save(ts,file=paste(dirDat,"ts.RData",sep="/"))
+```
+
+```{ralbn-om-harvest,fig.width=8}
+quads<- rbind(data.frame(x=c(-Inf,-Inf,Inf,Inf), y=c(-Inf,  1,  1,-Inf), 
+                         fill=as.factor("green")),
+              data.frame(x=c(-Inf,-Inf,Inf,Inf), y=c(   1,Inf,Inf,   1), 
+                         fill=as.factor("red")))
+
+ggplot(ts)+
+  geom_polygon(data=quads,aes(x,y,fill=fill)) +
+  scale_fill_manual(values = c("lightgreen","pink"), guide="none") +  
+  geom_line(aes(year,harvest,group=.id))+
+  facet_wrap(~.id)+
+  ylab(expression(Harvest/H[MSY]))+
+  xlab("Year")
+```
+
+**Figure 14** Harvest rate relative to MSY benchmark by scenario.
+
+
+```{ralbn-om-biomass,fig.width=8}
+ggplot(ts)+
+  geom_polygon(data=quads,aes(x,y,fill=fill)) +
+  scale_fill_manual(values = c("pink","lightgreen"), guide="none") +  
+  geom_line(aes(year,harvest,group=.id))+
+  facet_wrap(~.id)+
+  ylab(expression(Biomass/B[MSY]))+
+  xlab("Year")
+```
+
+**Figure 15** Stock biomass relative to MSY benchmark by scenario.
+
+```{ralbn-om-k2pp}
+kobePhase(ts)+
+  geom_path(aes(stock,harvest,group=.id))+
+  facet_wrap(~.id)+
+  ylab(expression(Harvest/H[MSY]))+
+  xlab(expression(Biomass/B[MSY]))
+```
+
+**Figure 16** Kobe Phase Plots by scenario
+.

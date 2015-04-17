@@ -1,0 +1,65 @@
+---
+title: "Albacore MSE"
+subtitle: "MP v OM"
+author: "Laurie"
+date: "05/04/2015"
+output: word_document
+---
+
+```{r, echo=FALSE}
+library(knitr)
+
+opts_chunk$set(comment=NA, fig.width =6, 
+                           fig.height=4,
+                           fig.path  ="../tex",
+                           warning=FALSE, 
+                           message=FALSE, 
+                           error  =FALSE, 
+                           echo   =FALSE,
+                           cache  =!FALSE)
+```
+
+```{rinit}
+library(FLCore)
+library(ggplotFL)
+library(reshape)
+library(plyr)
+library(kobe)
+library(FLBRP)
+library(lh)
+library(biodyn)
+library(popbio)
+
+theme_set(theme_bw(base_size=10))
+
+dirDat="/home/laurie/MEGAsync/mse/albn/data"
+
+load(paste(dirDat,"/om.RData",    sep=""))
+load(paste(dirDat,"/bd.RData",    sep=""))
+load(paste(dirDat,"/eql.RData",   sep=""))
+load(paste(dirDat,"/priors.RData",sep=""))
+
+yrs  =range(om[[1]])["maxyear"]+0:30
+range=c(range(om[[1]])["maxyear"],range(om[[1]])["maxyear"]+30,3)
+names(range)=c("min","max","interval")  
+
+uDev =rlnorm(100,FLQuant(0,dimnames=list(year=yrs)),.2)
+srDev=rlnorm(100,FLQuant(0,dimnames=list(year=yrs)),.3)
+```
+
+```{r}
+# runMSE=function(om,brp,srDev,uDev,
+#                 range=c(min=range(om)[max],max=range(om)[max]+30,interval=3),
+#                 hcr  =c(ftar=0.75,fmin=0.01,blim=0.8,btrig=0.4),
+#                 ctrl =controlFn(r=calcR(brp),k=refpts(brp)['msy','stock']*2),
+#                 con=NULL,append=TRUE)
+
+i=1
+runMSE(om[[i]],eql[[i]],
+      srDev,uDev,
+      hcr  =c(ftar=0.75,fmin=0.01,blim=0.8,btrig=0.4),
+      ctrl =control(mp[[i]]),
+      con=NULL,append=TRUE)
+```
+
+**Figure 4** Default HCR

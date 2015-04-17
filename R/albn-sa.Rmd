@@ -1,0 +1,233 @@
+---
+title: "Albacore MSE"
+subtitle: "MP v OM"
+author: "Laurie"
+date: "05/04/2015"
+output: html_document
+---
+
+```{r, echo=FALSE}
+library(knitr)
+
+opts_chunk$set(comment=NA, fig.width =6, 
+                           fig.height=4,
+                           fig.path  ="../tex/",
+                           warning=FALSE, 
+                           message=FALSE, 
+                           error  =FALSE, 
+                           echo   =FALSE,
+                           cache  =!FALSE)
+```
+
+```{rinit}
+library(FLCore)
+library(ggplotFL)
+library(reshape)
+library(plyr)
+library(kobe)
+library(FLBRP)
+library(lh)
+library(biodyn)
+library(popbio)
+
+theme_set(theme_bw(base_size=10))
+
+end  =2041
+start=1975
+
+dirDat="/home/laurie/MEGAsync/mse/albn/data"
+
+load(paste(dirDat,"/om.RData",sep=""))
+load(paste(dirDat,"/eql.RData",sep=""))
+                        
+r<-function(x){
+  f   =c(FLBRP:::refpts(x)["crash","harvest"])
+  if (is.na(f)) 
+      f=c(refpts(x)["msy","harvest"])*3
+                                  
+  r=try(log(lambda(leslie(x,f))))
+  if (class(r)=="try-error") 
+      r=NA  
+  r}
+
+priorFn<-function(x){
+  
+  # production function based ob S/R
+  msy =c(FLBRP:::refpts(x)["msy",   "yield"])
+  bmsy=c(FLBRP:::refpts(x)["msy",   "biomass"])
+  
+  r=r(x)
+  k   =c(FLBRP:::computeRefpts(x)["virgin","biomass"])
+  p   =optimise(function(p,bmsy,k) 
+                (bmsy-k*(1/(1+p))^(1/p))^2, c(0.001,5), 
+                bmsy=bmsy,k=k)$minimum
+
+  kPrime=bmsy/((1/(1+p))^(1/p))
+  rPrime=msy/(k*(1/(1+p))^(1/p+1))
+  
+  cbind(p=p,
+        r     =r,     k     =k,
+        rPrime=rPrime,kPrime=kPrime,
+        msy=msy,bmsy=bmsy,fmsy=msy/bmsy)}
+
+priors=ldply(eql,priorFn)
+priors=cbind(priors,mdply(seq(length(om)), 
+              function(i) 
+                data.frame(b0=mean(stock(om[[i]])[,ac(1975:1980)]))))[,-10]
+priors=transform(priors,b0=pmin(b0/k,0.8))
+
+save(priors,file=paste(dirDat,"/priors.RData",sep=""))
+```
+
+```{r}
+fitBd<-function(om,eql,priors,
+                fixQ=FALSE,prr="",
+                rMult=1,b0Mult=1,kMult=1,
+                rtn=function(x,y){
+                 model.frame(mcf(FLQuants(
+                            omF=catch(x)/stock(x),
+                            omB=stock(x),
+                            mpF=harvest(y),
+                            mpB=stock(y))),drop=T)})
+  {
+  bd=biodyn:::FLBRP2biodyn(eql)
+  catch(bd)=catch(om)
+  
+  params(bd)[c("r","k","p","b0")]=unlist(c(priors[,c("rPrime","k","p","b0")]))
+  params(bd)["r" ]=params(bd)["r" ]*rMult
+  params(bd)["k" ]=params(bd)["k" ]*kMult
+  params(bd)["b0"]=params(bd)["b0"]*b0Mult
+  
+  bd@stock=FLQuant(c(params(bd)["k"]*params(bd)["b0"]),
+                   dimnames=list(age="all",year=dimnames(stock(om))$year))
+  bd=window(bd,end=dims(stock(om))$maxyear-1)
+  
+  bd=fwd(bd,catch=catch(bd))
+  
+  u =window((stock(om)[,- dim(stock(om))[2]]+
+             stock(om)[,-1])/2,start=20)
+
+  setParams(bd)=u
+  setControl(bd)=params(bd)
+  
+  if (fixQ)
+    control(bd)["q1",c("phase","val")]=c(-1,1)
+
+  if (prr=="q"){
+    bd@priors["q1","weight"]=1
+    bd@priors["q1","a"]     =1 
+  }else if (prr=="bmsy"){
+    bd@priors["bmsy","weight"]=1
+    bd@priors["bmsy","a"]     =priors[,"bmsy"]
+  }else if (prr=="fmsy"){
+    bd@priors["fmsy","weight"]=1
+    bd@priors["fmsy","a"]     =priors[,"fmsy"]
+  }else if (prr=="msy"){
+    bd@priors["msy","weight"]=1
+    bd@priors["msy","a"]     =priors[,"msy"]
+  }else if (prr=="r"){
+    bd@priors["r","weight"]=1
+    bd@priors["r","a"]     =priors[,"r"]
+  }else if (prr=="k"){
+    bd@priors["k","weight"]=1
+    bd@priors["k","a"]     =priors[,"k"]
+  }else if (prr=="rPrime"){
+    bd@priors["r","weight"]=1
+    bd@priors["r","a"]     =priors[,"rPrime"]
+  }else if (prr=="kPrime"){
+    bd@priors["k","weight"]=1
+    bd@priors["k","a"]     =priors[,"kPrime"]}
+
+  bd=fit(bd,u)
+
+  res=rtn(om,bd)
+  
+#   ggplot(res)+
+#     geom_line(aes(year,omB,group=i))+
+#     geom_line(aes(year,mpB,group=i),col="red")
+
+  res
+  }
+
+goodFn<-function(det){
+  
+  rms=ddply(det,.(i,rMult,fixQ,prr),
+            function(x) sum(((x$mpB-x$omB)/x$omB)^2,na.rm=T)/length(x$omB))
+  
+  rms =rms[do.call(order,rms[,c("i","V1")]),]
+  good=rms[!duplicated(rms[,"i"]),]
+  
+  good[do.call(order,list(V1=good[,"V1"])),]}
+```
+
+```{ralbn-sa-det}
+runs=expand.grid(i    =seq(length(om)),
+                 rMult=1.5,
+                 fixQ =!as.logical(TRUE),
+                 prr  ="")
+
+det=mdply(runs,
+          function(i,rMult,fixQ,prr){
+            #print(paste(i,rMult,prr))
+                fitBd(window(om[[i]],start=1975),
+                      eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult)})
+ggplot(det)+
+  geom_line(aes(year,omB,group=i))+
+  geom_line(aes(year,mpB,group=i),col="red")
+```
+
+**Figure 1** Deterministic comparison between OM and MP.
+
+```{ralbn-sa-stochastic,fig.height=8}
+mp=biodyns(mlply(runs,
+          function(i,rMult,fixQ,prr){
+            #print(paste(i,rMult,prr))
+                fitBd(window(om[[i]],start=1975),
+                      eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult,
+                      rtn=function(x,y) y)}))
+
+u=FLQuants(llply(om,function(x) window(stock(x),start=1975)))
+u=FLQuants(llply(u, function(x) rlnorm(100,log(x),.2)))
+
+mp=biodyns(mlply(seq(length(mp)), function(i) {
+  catch(mp[[i]])=propagate(catch(mp[[i]]),100)
+  fit(mp[[i]],u[[i]])}))
+names(mp)=names(om)
+
+save(mp,u,file=paste(dirDat,"bd.RData",sep="/"))
+
+ggplot(rbind.fill(cbind(What="MP",plot(FLQuants(llply(mp,stock)))$data),
+                  cbind(What="OM",plot(FLQuants(llply(om,stock)))$data)))+
+       geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
+       geom_line(aes(year,`50%`,col=What))+
+       facet_wrap(~qname,ncol=2)
+```
+
+**Figure 2** Comparison of stochastic CPUE MP and deterministic OM.
+
+
+```{ralbn-sa-counterfactual}
+srDev=rlnorm(100,FLQuant(0,dimnames=list(year=2012:2041)))
+counterfactual=FLStocks(mlply(seq(length(om)),
+      function(i){
+            o=fwdWindow(om[[i]],end=2041,eql[[i]])
+            o=fwd(o,f=FLQuant(c(FLBRP:::refpts(eql[[i]])["msy","harvest"]),
+                            dimnames=list(year=2012:2041)),
+                            sr=eql[[i]],
+                            sr.residuals=srDev)
+            o}))
+
+names(counterfactual)=names(om)          
+plot(FLQuants(llply(counterfactual[-6],stock))) +
+  facet_wrap(~qname,scale="free")
+```
+
+**Figure 3** Counterfactual OM stock, i.e. perfect FMSY
+
+```{ralbn-sa-counterfactual-catch}
+plot(FLQuants(llply(counterfactual[-6],catch))) +
+  facet_wrap(~qname,scale="free")+
+  scale_x_continuous(limits=c(2000,2041))
+```
+
+**Figure 4** Counterfactual OM catch, i.e. perfect FMSY
