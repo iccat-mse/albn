@@ -29,17 +29,16 @@ library(reshape)
 library(FLBRP)
 library(biodyn)
 library(scales)
-library(lh)
 library(kobe)
 
 theme_set(theme_bw(10))
 
-dirMy ="/home/laurie/MEGAsync/mse/albn"
+dirMy ="C:/temp/albn"
 dirDat=paste(dirMy,"/data",sep="")
 ```
 
 ```{r,eval=FALSE}
-load("/home/laurie/Desktop/rfmos/iccat/SCRS/2015/alb/data/ALB.RData")
+load("C:/temp/albn/data/ALB.RData")
 om=ALB
 rm(ALB)
 
@@ -105,7 +104,33 @@ ggplot(biol)+
 # Comparison with biomass dynamic model
 
 ```{ralbn-om-prd,fig.height=4}
-bd=biodyn:::FLBRP2biodyn(eql[["Base"]])
+FLBRP2biodyn=function(from){
+  
+  ## age based regference points
+  msy =c(from@refpts["msy",   "yield"])
+  bmsy=c(from@refpts["msy",   "biomass"])
+  k   =c(from@refpts["virgin","biomass"])
+  
+  # biomass based reference points
+  p   =optimise(function(p,bmsy,k) 
+    (bmsy-k*(1/(1+p))^(1/p))^2, c(0.001,5), bmsy=bmsy,k=k)$minimum
+  k=bmsy/((1/(1+p))^(1/p))
+  r=msy/(k*(1/(1+p))^(1/p+1))
+  b0=mean(stock(from)[,1:5]/k)
+  
+  bd=biodyn()
+  
+  bd@params=FLPar(c(r=r,k=k,p=p,b0=b0))
+  
+  bd@catch=catch.obs(from)
+  bd@stock=from@stock.obs
+  
+  range(bd)["minyear"]=dims(bd@catch)$minyear
+  range(bd)["maxyear"]=dims(bd@catch)$maxyear
+  
+  bd}
+
+bd=FLBRP2biodyn(eql[["Base"]])
 bd=fwd(bd,catch=catch(bd)[,-c(1,82)])
 
 cpue =stock(om[["Base"]])
@@ -168,7 +193,7 @@ tmp=rbind.fill(tmp,
                                        computeRefpts(bry)["msy","biomass"]),
                          msy=data,quantity="hrate")[,c(2:3,5)])
 
-bdt=maply(1:82,function(i) biodyn:::FLBRP2biodyn(iter(bry,i))@params[c("r","k","p")])
+bdt=maply(1:82,function(i) FLBRP2biodyn(iter(bry,i))@params[c("r","k","p")])
 
 bdt=melt(bdt)
 names(bdt)=c("iter","quantity","msy")
@@ -201,7 +226,91 @@ ggplot(ddply(subset(bdt,!(quantity%in%c("Fapex Age","p"))),
 **Figure 8** Relative time series of population parameters
 
 ```{r}
-source('~/Desktop/flr/git/FLBRP/R/FLBRP-production.R')
+productionFn=function(object,stk="missing",
+                      slots=c("landings.sel","discards.sel",
+                              "stock.wt","landings.wt","discards.wt",
+                              "m","mat",
+                              "harvest.spwn","m.spwn")){
+  
+  nyr=dim(biomass.obs(object))[2]
+  
+  prd=biomass.obs(object)[,-nyr]+
+    catch.obs(  object)[,-nyr]-
+    biomass.obs(object)[,-1]
+  
+  ref               =FLBRP:::refpts(object)[1,]
+  dimnames(ref)[[1]]="biomass"
+  ref               =propagate(ref,nyr-1)
+  ref[]             =NA
+  ref[,"biomass"]   =biomass.obs(object)[,-nyr]
+  refpts(object)    =ref
+  
+  if (!missing(stk)){
+    for (i in slots[!(slots%in%c("landings.sel","discards.sel"))]){
+      slot(object,i)=propagate(slot(object,i),dims(ref)$iter)
+      slot(object,i)[]=slot(stk,i)[,-nyr]
+    }
+    
+    if (any(c("landings.sel","discards.sel")%in%slots)){
+      sel=harvest(stk)[,-nyr]
+      sel=sel%/%apply(sel[ac(range(stk)["minfbar"]:range(stk)["maxfbar"])],2,mean)
+      
+      if ("landings.sel"%in%slots){
+        landings.sel(object)  =propagate(landings.sel(object),dims(ref)$iter)
+        landings.sel(object)[]=sel*landings.n(stk)[,-nyr]/catch.n(stk)[,-nyr]}
+      
+      if ("discards.sel"%in%slots){
+        discards.sel(object)  =propagate(discards.sel(object),dims(ref)$iter)
+        discards.sel(object)[]=sel*discards.n(stk)[,-nyr]/catch.n(stk)[,-nyr]}
+    }
+  }
+  
+  refpts(object)=computeRefpts(object)
+  
+  res=cbind(as.data.frame(biomass.obs(object)[,-nyr],drop=T)[,c("year","data")],
+            as.data.frame(ssb.obs(    object)[,-nyr],drop=T)[,c("data")],
+            as.data.frame(catch.obs(  object)[,-nyr],drop=T)[,"data"],
+            as.data.frame(rec.obs(    object)[,-nyr],drop=T)[,"data"],
+            as.data.frame(biomass.obs(object)[,-nyr]-
+                          ssb.obs(    object)[,-nyr],drop=T)[,"data"],
+            as.data.frame(prd,drop=T)[,"data"],
+            model.frame(FLBRP:::refpts(object)[,"yield"])[,"biomass"])
+  
+  names(res)=c("year","biomass","ssb","catch","rec","juve","obs","hat")
+  
+  res[,c("year","biomass","ssb","juve","rec","catch","obs","hat")]}
+
+#' production
+#'
+#' @description Estimates estimates surplus production based on equilibrium analysis 
+#' 
+#' @param   object an object of class \code{FLBRP}
+#' @param   stk an \code{FLStock}
+#' @param   slots if provides then allows for non-stationarity by using the observed 
+#' parameters each year, rather than the averages in  \code{FLBRP}
+#'
+#' @export
+#' @rdname production
+#'
+#' @details Returns a data.frame with catch, biomass, observed (obs) and
+#' expected (hat) production by year 
+#' @examples
+#' \dontrun{
+#'    prd=production(x)
+#' }
+
+setGeneric('production',   function(object,stk,...) standardGeneric('production'))
+
+setMethod('production', signature(object='FLBRP',stk='missing'),
+          function(object,stk) productionFn(object,stk))
+
+setMethod('production', signature(object='FLBRP',stk='FLStock'),
+         function(object,stk,slots=c("landings.sel","discards.sel",
+                                     "stock.wt","landings.wt","discards.wt",
+                                     "m","mat",
+                                     "harvest.spwn","m.spwn"))
+         productionFn(object,stk,slots))
+          
 ```
 
 
@@ -233,9 +342,9 @@ ggplot(res1)+geom_line( aes(year,hat))+
 
 ```{ralbn-om-ccf,fig.width=8,fig.height=6}
 par(mfrow=c(2,2),mar=c(2,2,4,2))
-with(dat,acf(Recruitment))
-with(dat,acf(Production))
-with(dat,ccf(Recruitment,Production))
+with(dat,acf(rec))
+with(dat,acf(obs))
+with(dat,ccf(rec,obs))
 ```
 
 **Figure 11** Auto and cross correlation for recruitment and production, showing production is driven by recruitment 5 to 10 years earlierand that although recruitment exhibits white noise there is autocorrelation in productivity.
@@ -246,7 +355,7 @@ ggplot(spectra(dat$Recruitment))+
   theme_bw()
 
 ggplot(spectra(dat$Production))+
-  geom_point(aes(f,mx))+
+  geom_point(aes(f,mx)sa)+
   theme_bw()
 
 **Figure** Spectra for production
@@ -254,15 +363,182 @@ ggplot(spectra(dat$Production))+
 
 
 ```{ralbn-stars-rec,fig.width=8}
-source('/home/laurie/Desktop/MEGA/papers/submitted/3stocks/v3/regimeShift.R')
+#==Cody Szuwalski, 10/18,2012
+#==this function identifies the first regime shift in a series given a significance level
+#==based on a t-distribution (sig) and an assumed regime length (regLN) 
+#==It must be used iteratively to identify all shifts in a time series (see example)
 
-res=rod(dat$Recruitment,dat$year)
+#==The key differences between this algorithm and STARS (Rodionov, 2004) is that 
+#==when a new regime is detected, the algorithm begins searching at n+regimeLength,
+#==where  is the first year of the regime identified and regimeLength is the 
+#==assumed minimum length of a regime.  The original STARS begins searching at n+1.
+#==Additionally, a 'Huber parameter' (which adjusts the influence of outliers)
+#==is not included in this version of the algorithm.  
+
+ROregimeSHFT<-function(regLN,sig,series,shift=0){
+ Shifts<-0
+ startyr <-1
+ if(shift!=0) {startyr<-shift}
+for (i in seq(startyr,(length(series)-(regLN)) ) )
+{
+window<-series[i:(regLN+(i-1))]
+basemean<-mean(window,na.rm=T)
+basevar<-var(window,na.rm=T)
+val<-sig*sqrt(2*basevar/regLN)
+
+# the below line would be changed to something like:
+# if (series[i+1] > basemean+val | series[i+1] <basemean-val)
+# for the original algorithm (I have not valed this)
+
+if (series[regLN+i] > basemean+val | series[regLN+i] <basemean-val)
+ { 
+ RSI<-0
+ if (series[regLN+i] > basemean+val)
+  {
+   newmean<-basemean+val
+   RSI<-(series[regLN+i]-newmean)/(regLN*(sqrt(basevar)))
+   down<-0} else
+  {
+   newmean<-basemean-val
+   RSI<-(newmean-series[regLN+i])/(regLN*(sqrt(basevar)))
+   down<-1
+  }
+
+ origSIGN<-sign(RSI)
+ counter<-min(regLN-1,(length(series)-(regLN+(i-1))))
+ RSI<-0
+ for (j in 1:counter)
+   { 
+    Shifts<-0
+    if(down==0)
+    {RSI<- RSI + (series[regLN+i+j-1]-newmean)/(regLN*(sqrt(basevar)))}else
+    {RSI<- RSI + (newmean-series[regLN+i+j-1])/(regLN*(sqrt(basevar)))}
+
+
+   if (sign(RSI)!=origSIGN | RSI == Inf) {break}
+   if (j == counter)
+    {
+    Shifts<-i
+    break
+    }
+   }
+  }
+  if(Shifts!=0) {break}
+ }
+return(Shifts)
+}
+
+#==the 'Shifts' returned from "ROregimeSHFT" is the index (year) the length of 
+#==the assumed regime before the regime occurs
+#==that is, if Shift[1]==3, and the assumed regime length is 10
+#==the regime shift occurs in year 13.
+
+#==if ROregimeSHFT doesn't find a shift, it returns zero
+#==the last entry in 'Shifts' (returned from the function) is either '0' or a value
+#==for a year where there is a potential, but unconfirmed shift
+
+#===============================================
+#===example aplication=========================
+#==============================================
+
+#==an example time series==
+# valMean<-0
+# valMean2<-1
+# valSD1<-0.5
+# valSD2<-0.5
+# val   <-c(rnorm(12,valMean,valSD1),rnorm(12,valMean2,valSD2),rnorm(12,valMean,valSD1))  		
+# plot(val,type="l")
+# 
+
+rod=function(val,year=NULL){
+#==set the assumed minimum regime length==
+rgLN<-10
+
+#== 'sig' should be based on an appropriate t-distribution given
+#== the number of observations in the series (but I didn't do that here)
+#== this significance level is roughly equal to p<0.1
+sig<-1.68
+
+#==iteration for finding all the shifts in a time series==
+Shift<-rep(NA,100)							# vector for recording shifts
+ if(length(val)>rgLN)
+ {
+  try(Shift[1]<-ROregimeSHFT(regLN=rgLN,sig=1.68,series=val),TRUE)
+  counts<-2
+  if(is.na(Shift[counts-1])==FALSE) 
+  {
+   while(Shift[counts-1]>0 & (Shift[counts-1]+rgLN+rgLN-1)<length(val))
+    {
+     Shift[counts]<-ROregimeSHFT(rgLN,sig,val,(Shift[counts-1]+rgLN-1))
+     counts<-counts+1
+    }
+   }
+  }   
+
+#===plot results=== 
+
+ShiftsVec<-Shift[!is.na(Shift)]
+
+if (!FALSE)
+plot(val,type="l")
+mn=NULL
+sd=NULL
+ln=NULL
+
+for(i in 1:length(ShiftsVec))
+  {
+  if(i==1){  
+     regMean<-mean(val[1:(Shift[i]+rgLN-1)])
+     regSD<-sd(val[1:(Shift[i]+rgLN-1)])
+     mn=c(mn,regMean)
+     sd=c(sd,regSD)
+     ln=c(ln,Shift[i]+rgLN-1)
+     
+     if (!FALSE)
+       polygon(x=c(1,Shift[i]+rgLN-1,Shift[i]+rgLN-1,1),
+     y=c(regMean+regSD,regMean+regSD,regMean-regSD,regMean-regSD),
+     border=NA,col="#0000ff55")
+    }
+
+  if(i>1){
+    endInd<-ShiftsVec[i]+rgLN-1
+    if(is.na(ShiftsVec[i+1]))
+       {endInd<-length(val)}
+     
+    regMean<-mean(val[(Shift[i-1]+rgLN):endInd])
+    regSD  <-sd(  val[(Shift[i-1]+rgLN):endInd])
+    mn=c(mn,regMean)
+    sd=c(sd,regSD)
+    ln=c(ln,endInd)
+     
+    if (!FALSE)
+      polygon(x=c(Shift[i-1]+rgLN,
+               endInd,
+               endInd,         
+               Shift[i-1]+rgLN),
+           y=c(regMean+regSD,
+               regMean+regSD,
+               regMean-regSD,
+               regMean-regSD),
+    border=NA,col="#0000ff55")}
+    
+print(ln)
+}
+
+minyear=c(year[1],year[rev(rev(ln)[-1])]+1)
+maxyear=min(year)+ln-1
+
+return(data.frame(mn=mn,sd=sd,i=factor(seq(length(mn))),
+                  ln=ln,minyear=minyear,maxyear=maxyear))}
+
+
+res=rod(dat$rec,dat$year)
 ```
 
 **Figure 12** Shifts in recruitment
 
 ```{ralbn-stars-prod,fig.width=8}
-res=rod(dat$Production,dat$year)
+res=rod(dat$obs,dat$year)
 ```
 **Figure 13 ** Shifts in production
 
