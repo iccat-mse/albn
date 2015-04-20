@@ -35,16 +35,15 @@ theme_set(theme_bw(base_size=10))
 dirDat="/home/laurie/MEGAsync/mse/albn/data"
 
 load(paste(dirDat,"/om.RData",    sep=""))
-load(paste(dirDat,"/bd.RData",    sep=""))
-load(paste(dirDat,"/eql.RData",   sep=""))
-load(paste(dirDat,"/priors.RData",sep=""))
+load(paste(dirDat,"/sa.RData",sep=""))
 
+nits =100
 yrs  =range(om[[1]])["maxyear"]+0:30
 range=c(range(om[[1]])["maxyear"],range(om[[1]])["maxyear"]+30,3)
 names(range)=c("min","max","interval")  
 
-uDev =rlnorm(100,FLQuant(0,dimnames=list(year=yrs)),.2)
-srDev=rlnorm(100,FLQuant(0,dimnames=list(year=yrs)),.3)
+uDev =rlnorm(nits,FLQuant(0,dimnames=list(year=yrs)),.2)
+srDev=rlnorm(nits,FLQuant(0,dimnames=list(year=yrs)),.3)
 ```
 
 ```{r}
@@ -54,9 +53,50 @@ srDev=rlnorm(100,FLQuant(0,dimnames=list(year=yrs)),.3)
 #                 ctrl =controlFn(r=calcR(brp),k=refpts(brp)['msy','stock']*2),
 #                 con=NULL,append=TRUE)
 
+runMSE=function(om,eql,mp,
+                srDev,uDev,
+                ftar=0.75,fmin=0.01,blim=0.8,btrig=0.4,
+                what="msy",
+                mult=TRUE,
+                range=c(range(om)["maxyear"],c(range(om)["maxyear"])+30,interval=3)){
+  
+  names(range)=c("min","max","interval")
+  
+  ## OM projections
+  om  =fwdWindow(om,end=range["max"],eql)
+  nits=dims(srDev)$iter
+  
+  ## F in longterm
+  lgt=FLQuant(c(FLBRP:::refpts(eql)['msy','harvest']*hcr['ftar']),
+                         dimnames=list(year=range["min"]:range["max"],iter=seq(nits)))
+  
+  ## Add stochastcity
+  om =fwd(om,f=lgt, sr=eql,sr.residuals=srDev)
+  
+  ## save projection for comparison
+  prj=om
+  
+  res=mseBiodyn(om,eql,
+                srDev=srDev,
+                uDev =uDev,
+                control=control(mp),
+                priors =mp@priors,
+                start   =range[1],
+                end     =range[2],
+                interval=range[3],
+                ftar =hcr['ftar'],
+                fmin =hcr['ftar'],
+                blim =hcr['blim'],
+                btrig=hcr['btrig'],
+                what =what,
+                mult =mult)
+    
+  res}  
+
 i=1
 runMSE(om[[i]],eql[[i]],
       srDev,uDev,
+      interval=3,
       hcr  =c(ftar=0.75,fmin=0.01,blim=0.8,btrig=0.4),
       ctrl =control(mp[[i]]),
       con=NULL,append=TRUE)

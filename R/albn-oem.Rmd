@@ -1,6 +1,6 @@
 ---
 title: "North Atlanic Albacore"
-subtitle: "Obeservation Error Model"
+subtitle: "Obeservation Error Model for CPUE"
 author: "Laurence Kell"
 date: "26/03/2015"
 output: html_document
@@ -10,8 +10,8 @@ output: html_document
 library(knitr)
 
 opts_chunk$set(comment=NA, 
-               fig.width =6, 
-               fig.height=6,
+               fig.width =8, 
+               fig.height=4,
                fig.path  ="../tex/",
                warning=FALSE, 
                message=FALSE, 
@@ -24,15 +24,11 @@ opts_chunk$set(comment=NA,
 ```{r, echo=FALSE}
 library(FLCore)
 library(ggplotFL)
-library(scales)
 library(plyr)
 library(reshape)
-library(FLBRP)
-library(biodyn)
-library(aspic)
-library(plotrix)
-library(corrplot)
 library(diags)
+library(R4MFCL)
+library(kobe)
 
 theme_set(theme_bw(10))
 
@@ -40,45 +36,65 @@ dirMy ="/home/laurie/MEGAsync/mse/albn"
 dirDat=paste(dirMy,"/data",sep="")
 dirInp="/home/laurie/Desktop/rfmos/iccat/kobe/Inputs/albn/2013/mfcl"
 
-source('~/Desktop/flr/git/FLMethLen/R/lk-mfcl.R')
-
-lfile=paste(dirInp,"/alt",1:7,"/length.fit",sep="")
-ffile=paste(dirInp,"/alt",1:7,"/albN.frq",  sep="")
-rfile=paste(dirInp,"/alt",1:7,"/plot.rep",  sep="")
-
+#lfile=paste(dirInp,"/alt",1:7,"/length.fit",sep="")
+#ffile=paste(dirInp,"/alt",1:7,"/albN.frq",  sep="")
+#rfile=paste(dirInp,"/alt",1:7,"/plot.rep",  sep="")
+load(paste(dirDat,"/om.RData",sep=""))
 ```
-
 
 ```{r}
 dgs=mdply(paste(dirInp,"/alt",1:7,"/plot.rep",sep=""),
           function(x) diags(x,"mfcl"))
 
-c("ESP_BBrec","EsFr_TR","EsFr_BBear","PRT_BB",
+flt=c("ESP_BBrec","EsFr_TR","EsFr_BBear","PRT_BB",
   "JPN_LLtrg","JPN_LLtra","JPN_LLbyc",
-  "TAI_LL","TAI_LL","TAI_LL",
+  "TAI_LL1","TAI_LL2","TAI_LL3",
   "KrPaCu_LL","Other_SU")
+
+dgs=transform(dgs,fleet=flt[name])
+
+uCV=daply(subset(dgs,year>=1975),.(fleet),
+      with, var(effDev.value))^.5
+
+# rep=mlply(paste(dirInp,"/alt",1:7,"/plot.rep",sep=""),
+#           function(x) read.rep(x))
+# 
+# caa=mlply(paste(dirInp,"/alt",1,sep=""),
+#           function(x) {
+#             rep=read.rep(paste(x,"plot.rep",sep="/"))
+#             read.ests(rep,paste(x,"ests.rep",sep="/"))})
+            
+rep=read.rep("/home/laurie/Desktop/rfmos/iccat/kobe/Inputs/albn/2013/mfcl/alt1/plot.rep")
+paa=read.ests(rep,"/home/laurie/Desktop/rfmos/iccat/kobe/Inputs/albn/2013/mfcl/alt1/ests.rep")[[1]]
+
+paa=sweep(paa,1:2,apply(paa,1:2,sum),"/")
+
+dat=ddply(melt(apply(paa[61:81,,],2:3,mean)), .(X2), 
+             transform, sel=value/max(value))
+dat=transform(dat,fleet=flt[X2])
+ggplot(dat)+
+  geom_line(aes(X1,sel,col=fleet))+
+  kobe:::theme_ms(legend.position="bottom")
+
+paa=cast(dat[,c(1,4,5)],X1~fleet,value="sel")
+
+save(paa,uCV,file=paste(dirDat,"/oem.RData",sep="/"))
 ```
 
-
+**Figure 1** Selection Patterns
 
 ```{r}
-ggplot(subset(dgs,name=="flt2"))+
-          geom_point( aes(year,effDev.value,group=name,col=name))   +
-          theme_ms(14,legend.position="none")            +
-          xlab("Year") + ylab("Effort Dev")+
-          facet_grid(X1~name,scale="free_x")
+oem<-function(flt,om,paa=paa,dev=uCV){
+       
+  res=apply(sweep(catch.n(om),1,paa[,flt],"*")*catch.wt(om),c(2,6),sum)
+  
+  if (!is.FLQuant(dev)){
+    
+    dev=rlnorm(dims(res)$iter,FLQuant(0,dimnames=dimnames(iter(res,1))),dev[flt])}
+    
+  res*dev[,dimnames(res)$year]}
+
+plot(oem(flt[6],propagate(om[[1]],100),paa,uCV))
 ```
 
-**Figure 6** CPUE fits
-
-```{r}
-lfile=paste(dirInp,"/alt",1:7,"/length.fit",sep="")
-ffile=paste(dirInp,"/alt",1:7,"/albN.frq",  sep="")
-
-alkMFCL(lfile[1],ffile[1],1)
-
-ts=mdply(paste(dirInp,"/run",1:7,"/aspic.rdat",sep=""),
-          function(x) data.frame(biomass=dget(x)$t.series$b,
-                                 harvest=dget(x)$t.series$F.total,
-                                 year   =dget(x)$t.series$year))
-```
+**Figure 2** CPUE 

@@ -33,18 +33,26 @@ library(lh)
 library(kobe)
 
 theme_set(theme_bw(10))
+
+dirMy ="/home/laurie/MEGAsync/mse/albn"
+dirDat=paste(dirMy,"/data",sep="")
+```
+
+```{r,eval=FALSE}
+load("/home/laurie/Desktop/rfmos/iccat/SCRS/2015/alb/data/ALB.RData")
+om=ALB
+rm(ALB)
+
+save(om,file=paste(dirDat,"om.RData",sep="/"))
 ```
 
 ```{r}
-dirMy ="/home/laurie/MEGAsync/mse/albn"
-dirDat=paste(dirMy,"/data",sep="")
-
-load(paste(dirDat,"alb.RData",sep="/"))
+load(paste(dirDat,"om.RData",sep="/"))
 ```
 
 
 ```{ralbn-om,fig.width=8}
-ggplot(ldply(alb, function(x) as.data.frame(FLQuants(x,
+ggplot(ldply(om, function(x) as.data.frame(FLQuants(x,
                               Recruits=rec,
                               SSB     =ssb,
                               Biomass =stock,
@@ -59,33 +67,31 @@ ggplot(ldply(alb, function(x) as.data.frame(FLQuants(x,
 **Figure 1** Time series of recruits, SSB, biomass, mean F, F apex and Catch
 
 ```{ralbn-om-sr}
-srs=FLSRs(llply(alb,as.FLSR,model="bevholt"))
+srs=FLSRs(llply(om,as.FLSR,model="bevholt"))
 srs=FLSRs(llply(srs, fmle,control=list(silent=TRUE)))
-names(srs)=names(alb)
+names(srs)=names(om)
 
-plot(srs[[9]])
+plot(srs[["Base"]])
 ```
 
 **Figure 2**  Stock recruitment fit with diagnostics for base case.
 
 ```{ralbn-om-eql,fig.width=8}
-brs=FLBRPs(mlply(names(srs),function(i) 
-  brp(FLBRP(alb[[i]],sr=srs[[i]],nyears=dims(alb[[i]])$year))))
-names(brs)=names(alb)
-plot(brs,refpts=FALSE)+theme_bw(10)
-
-save(brs,file=paste(dirDat,"brs.RData",sep="/"))
+eql=FLBRPs(mlply(names(srs),function(i) 
+  brp(FLBRP(om[[i]],sr=srs[[i]],nyears=dims(om[[i]])$year))))
+names(eql)=names(om)
+plot(eql,refpts=FALSE)+theme_bw(10)
 ```
 
 **Figure 3**  Equilibrium curves
 
 
 ```{ralbn-om-biol,fig.width=8}
-names(brs)=names(alb)
-biol=ldply(brs, function(x) as.data.frame(x[["catch.sel","m","mat","stock.wt"]]))
+names(eql)=names(om)
+biol=ldply(eql, function(x) as.data.frame(x[["catch.sel","m","mat","stock.wt"]]))
 biol=transform(biol,
                Quantity=factor(qname,labels=c("Selectivity","M","Maturity","Mass")),
-               .id     =names(alb)[X1])
+               .id     =names(om)[X1])
 ggplot(biol)+
   geom_line(aes(age,data,group=.id,col=.id))+ 
   facet_wrap(~Quantity,scale="free_y")+ 
@@ -99,17 +105,14 @@ ggplot(biol)+
 # Comparison with biomass dynamic model
 
 ```{ralbn-om-prd,fig.height=4}
-bd=biodyn:::FLBRP2biodyn(brs[["Base"]])
+bd=biodyn:::FLBRP2biodyn(eql[["Base"]])
 bd=fwd(bd,catch=catch(bd)[,-c(1,82)])
 
-cpue =stock(alb[["Base"]])
-catch=catch(alb[["Base"]])
-save(bd,   file="/home/laurie/MEGAsync/mse/albn/data/bd.RData")
-save(cpue, file="/home/laurie/MEGAsync/mse/albn/data/cpue.RData")
-save(catch,file="/home/laurie/MEGAsync/mse/albn/data/catch.RData")
+cpue =stock(om[["Base"]])
+catch=catch(om[["Base"]])
 
-fbar(brs[["Base"]])=fbar(brs[["Base"]])/max(fbar(brs[["Base"]]))*.5
-brs[["Base"]]=brp(brs[["Base"]])
+fbar(eql[["Base"]])=fbar(eql[["Base"]])/max(fbar(eql[["Base"]]))*.5
+eql[["Base"]]=brp(eql[["Base"]])
 
 dat=model.frame(FLQuants(bd,"stock","catch"))
 
@@ -118,12 +121,12 @@ plotPrd(bd)+
   geom_path(aes(stock,catch),
             data=model.frame(FLQuants(bd,"stock","catch")))+
   geom_path(aes(stock,catch),
-             data=subset(model.frame(FLQuants(brs[["Base"]],"stock","catch")),
+             data=subset(model.frame(FLQuants(eql[["Base"]],"stock","catch")),
                          stock>0),col="blue")+
   theme_bw(10)
 ```
 
-**Figure 5** Comparison of age based and Pella Tomlonson production functions.
+**Figure 5** Comparison of age based and Pella Tomlinson production functions.
 
 
 ```{ralbn-om-mp}
@@ -137,7 +140,7 @@ fapexAge<-function(object){
 
 dat=
   rbind.fill(cbind(What="MP", as.data.frame(FLQuants(bd,      "catch","harvest","stock"))),
-             cbind(What="OM", as.data.frame(FLQuants(alb[["Base"]],"catch","harvest"=function(x)
+             cbind(What="OM", as.data.frame(FLQuants(om[["Base"]],"catch","harvest"=function(x)
                catch(x)/stock(x),"stock"))))
 
 ggplot(dat)+geom_line(aes(year,data,col=What))+
@@ -148,13 +151,13 @@ ggplot(dat)+geom_line(aes(year,data,col=What))+
 
 
 ```{r}
-bry=brs[["Base"]]
+bry=eql[["Base"]]
 landings.sel(bry)=propagate(iter(landings.sel(bry),1),82)
-landings.sel(bry)[]=harvest(alb[["Base"]])
+landings.sel(bry)[]=harvest(om[["Base"]])
 
 tmp=model.frame(computeRefpts(bry)["msy",1:5])
 tmp=rbind.fill(tmp,
-          transform(as.data.frame(fapexAge(alb[["Base"]]),drop=T),
+          transform(as.data.frame(fapexAge(om[["Base"]]),drop=T),
           msy=data,iter=year-1929,quantity="Fapex Age")[,c(3:5)])
 tmp=rbind.fill(tmp,
                transform(as.data.frame(computeRefpts(bry)["msy","biomass"]/
@@ -203,10 +206,10 @@ source('~/Desktop/flr/git/FLBRP/R/FLBRP-production.R')
 
 
 ```{ralbn-om-rec,fig.width=8,fig.height=4}
-res1=production(object=brs[[9]])
-res2=production(object=brs[[9]],alb[[9]])
+res1=production(object=eql[["Base"]])
+res2=production(object=eql[["Base"]],om[["Base"]])
 
-dat=merge(res1,as.data.frame(rec(alb[[9]]),drop=T))
+dat=merge(res1,as.data.frame(rec(om[["Base"]]),drop=T))
 names(dat)[c(4,6)]=c("Production","Recruitment")
 
 ggplot(dat)+
@@ -265,14 +268,9 @@ res=rod(dat$Production,dat$year)
 
 
 ```{r}
-load(paste(dirDat,"brs.RData",sep="/"))
+refs=transform(ldply(eql, function(x) FLBRP:::refpts(x)["msy",1:5,drop=T]))
 
-refs=transform(ldply(brs, function(x) FLBRP:::refpts(x)["msy",1:5,drop=T]),
-               .id=names(alb)[X1])[,-1]
-
-save(refs,file=paste(dirDat,"refs.RData",sep="/"))
-
-ts=ldply(alb, function(x) model.frame(FLQuants(x,"stock","ssb","catch","fbar","rec"),drop=T))
+ts=ldply(om, function(x) model.frame(FLQuants(x,"stock","ssb","catch","fbar","rec"),drop=T))
 ts=merge(ts,refs,by=".id")
 ts=transform(ts,stock  = stock/biomass,
                 ssb    = ssb.x/ssb.y,
@@ -280,7 +278,6 @@ ts=transform(ts,stock  = stock/biomass,
                 harvest=(catch/stock)/(yield/biomass),
                 f      =harvest/harvest,
                 rec    =rec.x/rec.y)[,c(".id","year","stock","ssb","catch","harvest","f","rec")]
-save(ts,file=paste(dirDat,"ts.RData",sep="/"))
 ```
 
 ```{ralbn-om-harvest,fig.width=8}
@@ -322,4 +319,10 @@ kobePhase(ts)+
 ```
 
 **Figure 16** Kobe Phase Plots by scenario
-.
+
+## Recriutment regimes
+```{r,fig.width=8}
+recRegime=ldply(om, function(x) with(as.data.frame(rec(x),drop=T),rod(data,year)))
+
+save(om,eql,recRegime,file=paste(dirDat,"om.RData",sep="/"))
+```

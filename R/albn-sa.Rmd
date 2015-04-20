@@ -38,8 +38,7 @@ start=1975
 dirDat="/home/laurie/MEGAsync/mse/albn/data"
 
 load(paste(dirDat,"/om.RData",sep=""))
-load(paste(dirDat,"/eql.RData",sep=""))
-                        
+
 r<-function(x){
   f   =c(FLBRP:::refpts(x)["crash","harvest"])
   if (is.na(f)) 
@@ -75,8 +74,6 @@ priors=cbind(priors,mdply(seq(length(om)),
               function(i) 
                 data.frame(b0=mean(stock(om[[i]])[,ac(1975:1980)]))))[,-10]
 priors=transform(priors,b0=pmin(b0/k,0.8))
-
-save(priors,file=paste(dirDat,"/priors.RData",sep=""))
 ```
 
 ```{r}
@@ -179,7 +176,7 @@ ggplot(det)+
 **Figure 1** Deterministic comparison between OM and MP.
 
 ```{ralbn-sa-stochastic,fig.height=8}
-mp=biodyns(mlply(runs,
+sa=biodyns(mlply(runs,
           function(i,rMult,fixQ,prr){
             #print(paste(i,rMult,prr))
                 fitBd(window(om[[i]],start=1975),
@@ -189,14 +186,12 @@ mp=biodyns(mlply(runs,
 u=FLQuants(llply(om,function(x) window(stock(x),start=1975)))
 u=FLQuants(llply(u, function(x) rlnorm(100,log(x),.2)))
 
-mp=biodyns(mlply(seq(length(mp)), function(i) {
-  catch(mp[[i]])=propagate(catch(mp[[i]]),100)
-  fit(mp[[i]],u[[i]])}))
-names(mp)=names(om)
+sa=biodyns(mlply(seq(length(sa)), function(i) {
+  catch(sa[[i]])=propagate(catch(sa[[i]]),100)
+  fit(sa[[i]],u[[i]])}))
+names(sa)=names(om)
 
-save(mp,u,file=paste(dirDat,"bd.RData",sep="/"))
-
-ggplot(rbind.fill(cbind(What="MP",plot(FLQuants(llply(mp,stock)))$data),
+ggplot(rbind.fill(cbind(What="MP",plot(FLQuants(llply(sa,stock)))$data),
                   cbind(What="OM",plot(FLQuants(llply(om,stock)))$data)))+
        geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
        geom_line(aes(year,`50%`,col=What))+
@@ -231,3 +226,9 @@ plot(FLQuants(llply(counterfactual[-6],catch))) +
 ```
 
 **Figure 4** Counterfactual OM catch, i.e. perfect FMSY
+
+```{r}
+
+save(sa,priors,file=paste(dirDat,"sa.RData",sep="/"))
+```
+
