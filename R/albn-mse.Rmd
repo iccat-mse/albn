@@ -36,45 +36,127 @@ dirDat="/home/laurie/MEGAsync/mse/albn/data"
 
 load(paste(dirDat,"/om.RData",    sep=""))
 load(paste(dirDat,"/sa.RData",sep=""))
+om    =om[[ "Base"]]
+eql   =eql[["Base"]]
+sa    =sa[[ "Base"]]
+priors=subset(priors,.id=="Base")
+hcr   =c(ftar=1,fmin=0.01,blim=0.4,btrig=1)
+
+control=sa@control
+params =sa@params
 
 nits =100
-yrs  =range(om[[1]])["maxyear"]+0:30
-range=c(range(om[[1]])["maxyear"],range(om[[1]])["maxyear"]+30,3)
-names(range)=c("min","max","interval")  
 
-uDev =rlnorm(nits,FLQuant(0,dimnames=list(year=yrs)),.2)
-srDev=rlnorm(nits,FLQuant(0,dimnames=list(year=yrs)),.3)
-```
+range=c(range(om)["maxyear"],range(om)["maxyear"]+30,3)
+names(range)=c("start","end","interval")  
 
-```{r}
+#uDev =rlnorm(nits,FLQuant(0,dimnames=list(year=yrs)),.2)
+srDev=rlnorm(nits,FLQuant(0,
+            dimnames=list(year=range["start"]:range["end"])),.3)
+
 # runMSE=function(om,brp,srDev,uDev,
 #                 range=c(min=range(om)[max],max=range(om)[max]+30,interval=3),
 #                 hcr  =c(ftar=0.75,fmin=0.01,blim=0.8,btrig=0.4),
 #                 ctrl =controlFn(r=calcR(brp),k=refpts(brp)['msy','stock']*2),
 #                 con=NULL,append=TRUE)
 
-runMSE=function(om,eql,mp,
-                srDev,uDev,
-                ftar=0.75,fmin=0.01,blim=0.8,btrig=0.4,
-                what="msy",
-                mult=TRUE,
-                range=c(range(om)["maxyear"],c(range(om)["maxyear"])+30,interval=3)){
-  
-  names(range)=c("min","max","interval")
+
+  names(range)=c("start","end","interval")  
   
   ## OM projections
-  om  =fwdWindow(om,end=range["max"],eql)
-  nits=dims(srDev)$iter
+  om  =fwdWindow(om,end=range["end"],eql)
   
   ## F in longterm
   lgt=FLQuant(c(FLBRP:::refpts(eql)['msy','harvest']*hcr['ftar']),
-                         dimnames=list(year=range["min"]:range["max"],iter=seq(nits)))
+                         dimnames=list(year=range["start"]:range["end"],
+                                       iter=seq(nits)))
   
   ## Add stochastcity
   om =fwd(om,f=lgt, sr=eql,sr.residuals=srDev)
   
-  ## save projection for comparison
-  prj=om
+attach(list(
+                    srDev =0.3,
+                    uDev  =0.2,
+                    u     =oem,
+                    what  ="msy",
+                    mult  =TRUE,
+                    bndF  =NULL,
+                    maxF  =5.0,     
+                    cmdOps=paste('-maxfn 500 -iprint 0 -est')))
+ 
+  ## Get number of iterations in OM
+  nits=c(om=dims(om)$iter, eql=dims(params(eql))$iter, rsdl=dims(srDev)$iter)
+  if (length(unique(nits))>=2 & !(1 %in% nits)) 
+    ("Stop, iters not '1 or n' in OM")
+  if (nits['om']==1) stock(om)=propagate(stock(om),max(nits))
+
+  ## Cut in capacity
+  maxF=mean(apply(fbar(window(om,end=range["start"])),6,max)*maxF)
+   
+  #### Observation Error (OEM) setup #######################
+  ## Random variation for CPUE  
+  cpue=oem(window(om,end=range["start"]),0.3)
+  
+  ## Loop round years
+  mp    =NULL
+  advice=NULL
+  for (iYr in seq(range["start"],range["end"]-range["interval"],range["interval"])){
+    #iYr = seq(start+rcvPeriod,range(om,'maxyear')-interval,interval)[1]
+    cat('\n===================', iYr, '===================\n')
+    
+    ## use data from last year
+    cpue=window(cpue,end=iYr-1)
+    cpue[,ac(iYr-(range["interval"]:1))]=oem(om[,ac(iYr-(range["interval"]:1))],uDev)
+    
+    #### Management Procedure
+    ## Set up assessment parameter options
+    bd=biodyn:::FLStock2biodyn(window(om,end=iYr-1))
+    pnms=dimnames(control)$param[dimnames(control)$param%in%dimnames(params(bd))$params]
+    params(bd)[pnms]=control[pnms,'val',1]
+    
+    #bd@priors=priors
+    setParams( bd)=cpue 
+    setControl(bd)=params(bd)
+    
+    ## fit
+    bd =biodyn::fit(bd,cpue,cmdOps=cmdOps)
+    bd =biodyn::fwd(bd,catch=catch(om)[,ac(iYr)])
+        
+    ## HCR
+    hcrPar=hcrParam(ftar =hcr["ftar" ]*fmsy(bd),
+                    btrig=hcr["btrig"]*bmsy(bd),
+                    fmin =hcr["fmin" ]*fmsy(bd), 
+                    blim =hcr["blim" ]*bmsy(bd))
+    hcrOutcome=biodyn::hcr(bd,hcrPar,
+                   hcrYrs=iYr+seq(range["interval"]),
+                   tac =TRUE)
+            
+    ## TACs for next year (iYtr+1) for n=interval years
+    TAC  =hcrOutcome$tac
+    TAC[]=rep(apply(TAC,6,mean)[drop=T],each=range["interval"])
+    
+    #### Operating Model Projectionfor TAC
+    om =FLash:::fwd(om,catch=TAC,maxF=maxF,sr=eql,sr.residuals=srDev)  
+
+    #### Summary Statistics
+    ## HCR actions, i.e. is biomass<Btrig?, what is F?, ..
+    advice=rbind(advice,data.frame(yearHcr=min(as.numeric(dimnames(hcrOutcome$hvt)$year)),
+                                   #yearAss=rep(range(bd)[2],dims(bd)$iter),
+                                   model.frame(           hcrPar,drop=T)[,-5],
+                                   tac    =as.data.frame(apply(hcrOutcome$tac,6,mean),drop=T)[,'data'],
+                                   harvest=as.data.frame(apply(hcrOutcome$hvt,6,mean),drop=T)[,'data'],
+                                   stock  =as.data.frame(hcrOutcome$stock,drop=T)[,2]))
+    
+    ## Assessment parameters and reference points
+    mp =rbind(mp,cbind(cbind(year=iYr,model.frame(params(bd))),
+                       model.frame(biodyn:::refpts(bd))[,-4],
+                       advice))
+    }
+  
+  ## save OM, projection without feedback, last assessment and MP summary
+  return(list(om=om,mou=mou,bd=bd,mp=mp,oem=mcf(FLQuants(cpue=cpue,catch=catch(om)))))
+  }
+
   
   res=mseBiodyn(om,eql,
                 srDev=srDev,

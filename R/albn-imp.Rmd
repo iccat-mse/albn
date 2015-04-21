@@ -38,7 +38,7 @@ theme_set(theme_bw(10))
 
 dirMy ="/home/laurie/MEGAsync/mse/albn"
 dirDat=paste(dirMy,"/data",sep="")
-dirInp="/home/laurie/Desktop/rfmos/iccat/kobe/Inputs/albn/2013/aspic"
+dirInp="http://rscloud.iccat.int/kobe/Inputs/albn/2013/aspic/"
 ```
 
 ```{r}
@@ -163,7 +163,7 @@ ggplot(ddply(dgs, .(index,X1), with, data.frame(obs=stdz(obs),hat=stdz(hat))))+
 
 
 ```{rabn-imp-cf,eval=FALSE,fig.height=4,fig.width=8}
-i=c(1,2,4,5)[2] #Troll, CT, JLL, All
+i=c(1,2,4,5)[1] #Troll, CT, JLL, All
 # 1&5 OK, 2&4 bad
 
 bd  =as(asp[[i]],"biodyn")
@@ -190,12 +190,12 @@ tm=model.frame(mcf(FLQuants(
          catch  =catch(asp[[i]]))),drop=T)
 tm=transform(tm,prd=lag-biomass+catch)
 ggplot(tm)+
-  geom_path(aes(biomass,prd))+
-  geom_point(aes(biomass,prd))+
+  geom_path(aes(biomass,prd,col=year))+
+  geom_point(aes(biomass,prd,col=year))+
   theme_bw()
 ```
 
-**Figure 7** Comparison of ASPIC and biodyn for run 1
+**Figure 7** Productivity for run 2
 
 ```{rabn-imp-xval}
 xval=function(object,cpue,minyear,maxyear=range(object)["maxyear"]){
