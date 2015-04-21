@@ -35,6 +35,7 @@ end  =2041
 start=1975
 
 dirDat="c:/temp/albn/data"
+dirDat="/home/laurie/MEGAsync/mse/albn/data"
 
 load(paste(dirDat,"/om.RData",sep=""))
 
@@ -201,7 +202,28 @@ ggplot(det)+
 **Figure 1** Deterministic comparison between OM and MP.
 
 ```{ralbn-sa-stochastic,fig.height=8}
+sa=biodyns(mlply(runs,
+          function(i,rMult,fixQ,prr){
+            #print(paste(i,rMult,prr))
+                fitBd(window(om[[i]],start=1975),
+                      eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult,
+                      rtn=function(x,y) y)}))
 
+u=FLQuants(llply(om,function(x) window(stock(x),start=1975)))
+u=FLQuants(llply(u, function(x) rlnorm(100,log(x),.2)))
+
+sa=biodyns(mlply(seq(length(sa)), function(i) {
+  catch(sa[[i]])=propagate(catch(sa[[i]]),100)
+  fit(sa[[i]],u[[i]])}))
+names(sa)=names(om)
+
+save(sa,u,file=paste(dirDat,"sa.RData",sep="/"))
+
+ggplot(rbind.fill(cbind(What="MP",plot(FLQuants(llply(sa,stock)))$data),
+                  cbind(What="OM",plot(FLQuants(llply(om,stock)))$data)))+
+       geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
+       geom_line(aes(year,`50%`,col=What))+
+       facet_wrap(~qname,ncol=2)
 ```
 
 **Figure 2** Comparison of stochastic CPUE MP and deterministic OM.

@@ -249,9 +249,9 @@ ggplot(x)+geom_point(aes(year,obs))+
 
 
 ```{rabn-imp-xval3}
-with(subset(x,X1==unique(X1)[2]),taylor.diagram(log(hat),log(obs),pos.cor=FALSE,normalize=TRUE,col="cyan",ref.sd=TRUE))
+with(subset(x,X1==unique(X1)[2]),taylor.diagram(log(obs),log(hat),pos.cor=FALSE,normalize=TRUE,col="cyan",ref.sd=TRUE))
 
-d_ply(x,.(X1),with, taylor.diagram(log(hat),log(obs),col="black",
+d_ply(x,.(X1),with, taylor.diagram(log(obs),log(hat),col="black",
                                             add=TRUE,pos.cor=TRUE,
                                             normalize=TRUE))
 ```

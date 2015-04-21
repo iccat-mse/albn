@@ -73,6 +73,13 @@ srDev=rlnorm(nits,FLQuant(0,
   
   ## Add stochastcity
   om =fwd(om,f=lgt, sr=eql,sr.residuals=srDev)
+
+ggplot(rbind.fill(cbind(What="MP",plot(FLQuants(sa,"stock"))$data),
+                  cbind(What="OM",plot(FLQuants(om,"stock"))$data)))+
+       geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
+       geom_line(aes(year,`50%`,col=What))+
+       facet_wrap(~qname,ncol=2)+
+  scale_x_continuous(limits=c(1975,2015))
   
 attach(list(
                     srDev =0.3,
