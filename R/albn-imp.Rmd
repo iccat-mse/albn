@@ -18,10 +18,12 @@ opts_chunk$set(comment=NA,
                error  =FALSE, 
                echo   =FALSE, 
                eval   =TRUE,
-               cache  =TRUE)
+               cache  =!TRUE)
 ```
 
 ```{r, echo=FALSE}
+#install.packages("C:/Users/laurie.kell/Documents/MEGAsync/temp/aspic_2.0.1.tar.gz",repos=NULL,type="source",INSTALL_opts=c("--no-multiarch"))
+
 library(FLCore)
 library(ggplotFL)
 library(scales)
@@ -36,7 +38,7 @@ library(diags)
 
 theme_set(theme_bw(10))
 
-dirMy ="/home/laurie/MEGAsync/mse/albn"
+dirMy ="c:/temp/albn"
 dirDat=paste(dirMy,"/data",sep="")
 dirInp="http://rscloud.iccat.int/kobe/Inputs/albn/2013/aspic/"
 ```
@@ -229,7 +231,7 @@ bd1=fit(bd1,cpue)
 
 x=xval(bd,cpue,2000)
 
-ggplot(x)+geom_point(aes(hat,obs))+
+ggplot(x)+geom_point(aes(obs,hat))+
   facet_wrap(~X1,ncol=2,scale="free")+
   theme_bw()
 ```
