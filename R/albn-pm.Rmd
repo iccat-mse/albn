@@ -1,0 +1,69 @@
+---
+title: "Albacore MSE"
+subtitle: "MP v OM"
+author: "Laurie"
+date: "05/04/2015"
+output: word_document
+---
+
+```{r, echo=FALSE}
+library(knitr)
+
+opts_chunk$set(comment=NA, fig.width =6, 
+                           fig.height=4,
+                           fig.path  ="../tex",
+                           warning=FALSE, 
+                           message=FALSE, 
+                           error  =FALSE, 
+                           echo   =FALSE,
+                           cache  =!FALSE)
+```
+
+```{r}
+library(FLCore)
+library(ggplotFL)
+library(reshape)
+library(plyr)
+library(kobe)
+library(FLBRP)
+library(lh)
+library(biodyn)
+library(popbio)
+
+theme_set(theme_bw(base_size=10))
+
+dirDat="/home/laurie/MEGAsync/mse/albn/data"
+
+load(paste(dirDat,"/om.RData",  sep=""))
+load(paste(dirDat,"/res1.RData",sep=""))
+
+```
+
+```{rrun}
+srDev=rlnorm(100,f[,,,,1]*0,.3)
+res=mlply(seq(0,1,.01), function(x){
+      f    =FLQuant(c(FLBRP:::refpts(eql[[1]])["msy","harvest"])*x,
+                    dimnames=list(year=2007:2040))
+      print(x)
+      window(fwd(fwdWindow(om[[1]],end=2040,eql[[1]]),
+                      f=f,sr=eql[[1]],sr.residuals=srDev),start=2010)})
+
+pm=ldply(res, FLBRP:::pMeasure, brp=eql[[1]])
+
+pm.=ddply(pm,.(X1), with, data.frame(x=dRate(catch,0.05),y=mean(ssbRel)))
+kb =ddply(pm,.(X1), with, mean(1-kobe:::kobeP(ssbRel,harvestRel)[,"overFished"]))
+p=ggplot(merge(pm.,kb))+geom_line(aes(V1,x))+coord_flip()
+p
+```
+
+**Figure 1** Pareto
+
+```{r}
+res.=subset(FLBRP:::pMeasure(res1[["om"]],eql[[1]]),year>2009)
+p+geom_point(aes(mean(1-kobe:::kobeP(res.$ssbRel,res.$harvestRel)[,"overFished"]),
+                 dRate(res.$catch,0.05)),col="red")+
+  geom_point(data=subset(p$data,X1==70),aes(V1,x),col="blue")
+
+```
+
+
