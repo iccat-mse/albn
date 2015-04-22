@@ -19,7 +19,7 @@ opts_chunk$set(comment=NA, fig.width =6,
                            cache  =!FALSE)
 ```
 
-```{rinit}
+```{r}
 library(FLCore)
 library(ggplotFL)
 library(reshape)
@@ -45,33 +45,37 @@ dirDat="/home/laurie/MEGAsync/mse/albn/data"
 
 load(paste(dirDat,"/om.RData",    sep=""))
 load(paste(dirDat,"/sa.RData",sep=""))
-om    =window(om[[ "Base"]],start=1975)
-eql   =eql[["Base"]]
-sa    =sa[[ "Base"]]
-hcr   =c(ftar=0.7,fmin=0.01,blim=0.4,btrig=1)
 nits  =100
 
-range=c(range(om)["maxyear"],range(om)["maxyear"]+30,3)
-names(range)=c("start","end","interval")  
+names(range)=c("start"=2007,"end"=2007+30,"interval"=3)  
 
 srDev =0.3
  uDev =0.2        
-maxF  =5.0    
-cmdOps=paste('-maxfn 500 -iprint 0 -est')
- 
-srDev=rlnorm(nits,FLQuant(0,
-            dimnames=list(year=range["start"]:range["end"])),srDev)
+```
 
-  
+```{rrun}
+runMSE<-function(om,eql,
+                 sa,hcr,
+                 srDev,uCV,
+                 range=c(start   =dims(om)$maxyear,
+                         end     =dims(om)$maxyear+30,
+                         interval=3),
+                 maxF=2,
+                 iaF=.1,
+                 cmdOps='-maxfn 500 -iprint 0 -est'){
+ 
   ## OM projections
   om  =fwdWindow(om,end=range["end"],eql)
-  
+ 
   ## F in longterm
   prj=FLQuant(c(FLBRP:::refpts(eql)['msy','harvest']*hcr['ftar']),
                          dimnames=list(year=range["start"]:range["end"],
                                        iter=seq(nits)))
   
   ## Add stochastcity
+  if (!(srDev%in%"FLQuant"))
+  srDev=rlnorm(nits,FLQuant(0,
+            dimnames=list(year=range["start"]:range["end"])),srDev)
   om =fwd(om,f=prj, sr=eql,sr.residuals=srDev)
   prj=om
 
@@ -82,31 +86,40 @@ srDev=rlnorm(nits,FLQuant(0,
   if (nits['om']==1) stock(om)=propagate(stock(om),max(nits))
 
   ## Cut in capacity
-  maxF=mean(apply(fbar(window(om,end=range["start"])),6,max)*maxF)
+  maxF=mean(apply(fbar(window(om,end=range["start"])),6,mean)*maxF)
    
   #### Observation Error (OEM) setup #######################
   ## Random variation for CPUE  
   cpue=oem(window(om,end=range["start"]),0.3)
   
+  ## use data from last year
+  cpue=window(cpue,end=range["start"]-1)
+  cpue[,ac(range["start"]-(range["interval"]:1))]=oem(om[,ac(range["start"]-(range["interval"]:1))],uDev)
+    
+  #### Management Procedure
+  ## Set up assessment parameter options
+  mp=biodyn:::FLStock2biodyn(window(om,end=range["start"]-1))
+  pnms=dimnames(control(sa))$param[dimnames(control(sa))$param%in%
+                                     dimnames(params(mp))$params]
+  params(mp)[pnms]=apply(sa@params[pnms],1,median)
+
+  setParams( mp)=cpue 
+  setControl(mp)=params(mp)
+
   ## Loop round years
   for (iYr in seq(range["start"],range["end"]-range["interval"],range["interval"])){
     cat('\n===================', iYr, '===================\n')
 
     ## use data from last year
+    mp=window(mp,end=iYr)
     cpue=window(cpue,end=iYr-1)
-    cpue[,ac(iYr-(range["interval"]:1))]=oem(om[,ac(iYr-(range["interval"]:1))],uDev)
-    
-    #### Management Procedure
-    ## Set up assessment parameter options
-    mp=biodyn:::FLStock2biodyn(window(om,end=iYr-1))
-    pnms=dimnames(control(sa))$param[dimnames(control(sa))$param%in%dimnames(params(mp))$params]
-    params(mp)[pnms]=apply(sa@params[pnms],1,median)
-    
-    setParams( mp)=cpue 
-    setControl(mp)=params(mp)
+    cpue[,     ac(iYr-(range["interval"]:1))]=oem(  om[,ac(iYr-(range["interval"]:1))],uDev)
+    catch(mp)[,ac(iYr-(range["interval"]:1))]=catch(om[,ac(iYr-(range["interval"]:1))])        
     
     ## fit
-    #mp =biodyn::fwd(mp,catch=catch(om)[,ac(iYr)])
+    mmm<<-list(om=om,mp=mp,prj=prj,cpue=cpue)
+    #mp =biodyn::fwd(mp,catch=catch(mp))
+    catch(mp)[is.na(catch(mp))]=0.01
     mp =biodyn::fit(mp,cpue,cmdOps=cmdOps)
         
     ## HCR
@@ -120,14 +133,42 @@ srDev=rlnorm(nits,FLQuant(0,
             
     ## TACs for next year (iYtr+1) for n=interval years
     TAC  =hcrOutcome$tac
-    TAC[]=tac(mp,hcrOutcome$hvt)[,1]
-    #TAC[]=rep(apply(TAC,6,mean)[drop=T],each=range["interval"])
+    TAC[]=rep(apply(TAC,6,mean)[drop=T],each=range["interval"])
     
     #### Operating Model Projectionfor TAC
     om =FLash:::fwd(om,catch=TAC,maxF=maxF,sr=eql,sr.residuals=srDev)  
-    }
     
-print(omMp(om,mp,end=iYr))    
+    mmm<<-list(om=om,mp=mp,prj=prj)
+    #print(omMp(om,mp))
+    }
+  
+  return(list(om=om,mp=mp,prj=prj))}
+```
+
+
+```{rrun}
+res1=runMSE(window(om[[ "Base"]],start=1975),
+            eql[["Base"]],
+            sa[[ "Base"]],
+            range=c("start"=2007,"end"=2007+30,"interval"=3),
+            hcr=c(ftar=0.7,fmin=0.01,blim=0.4,btrig=0.8),
+            srDev=0.3,uCV=0.2,maxF=1)
+omMp(res1$om,res1$mp)    
+save(res1,file=paste(dirDat,"res1.RData",sep="/"))
 ```
 
 **Figure 1** HCR
+
+```{rrun}
+res2=runMSE(window(om[[ "Base"]],start=1975),
+            eql[["Base"]],
+            sa[[ "Base"]],
+            range=c("start"=2007,"end"=2007+30,"interval"=3),
+            hcr=c(ftar=1,fmin=0.01,blim=0.4,btrig=0.8),
+            srDev=0.3,uCV=0.2,maxF=1)
+omMp(res2$om,res2$mp)    
+save(res2,file=paste(dirDat,"res2.RData",sep="/"))
+```
+
+**Figure 2** HCR
+
