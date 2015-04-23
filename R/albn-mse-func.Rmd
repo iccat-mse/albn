@@ -26,7 +26,6 @@ library(reshape)
 library(plyr)
 library(kobe)
 library(FLBRP)
-library(lh)
 library(biodyn)
 library(popbio)
 
@@ -47,7 +46,7 @@ load(paste(dirDat,"/om.RData",    sep=""))
 load(paste(dirDat,"/sa.RData",sep=""))
 nits  =100
 
-names(range)=c("start"=2007,"end"=2007+30,"interval"=3)  
+range=c("start"=2007,"end"=2007+30,"interval"=3)  
 
 srDev =0.3
  uDev =0.2        
@@ -184,7 +183,8 @@ runMSE<-function(om,eql,
   if (nits['om']==1) stock(om)=propagate(stock(om),max(nits))
 
   ## Cut in capacity
-  maxF=mean(apply(fbar(window(om,end=range["start"])),6,mean)*maxF)
+  maxF=FLQuant(c(apply(fbar(window(om,end=range["start"])),6,mean))*maxF,
+               dimnames=dimnames(srDev))
    
   #### Observation Error (OEM) setup #######################
   ## Random variation for CPUE  
@@ -215,11 +215,11 @@ runMSE<-function(om,eql,
     catch(mp)[,ac(iYr-(range["interval"]:1))]=catch(om[,ac(iYr-(range["interval"]:1))])        
     
     ## fit
-    mmm<<-list(om=om,mp=mp,prj=prj,cpue=cpue)
+    ##mmm<<-list(om=om,mp=mp,prj=prj,cpue=cpue)
     #mp =biodyn::fwd(mp,catch=catch(mp))
     catch(mp)[is.na(catch(mp))]=0.01
-    mp =biodyn::fit(mp,cpue,cmdOps=cmdOps)
-        
+    mp=biodyn::fit(mp,cpue,cmdOps=cmdOps)
+    
     ## HCR
     hcrPar=hcrParam(ftar =hcr["ftar" ]*fmsy(mp),
                     btrig=hcr["btrig"]*bmsy(mp),
@@ -234,7 +234,7 @@ runMSE<-function(om,eql,
     TAC[]=rep(apply(TAC,6,mean)[drop=T],each=range["interval"])
     
     #### Operating Model Projectionfor TAC
-    om =FLash:::fwd(om,catch=TAC,maxF=maxF,sr=eql,sr.residuals=srDev)  
+    om =FLash:::fwd(om,catch=TAC,maxF=maxF*10,sr=eql,sr.residuals=srDev)  
     
     mmm<<-list(om=om,mp=mp,prj=prj)
     #print(omMp(om,mp))
