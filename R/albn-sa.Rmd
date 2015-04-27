@@ -1,10 +1,17 @@
 ---
 title: "Albacore MSE"
-subtitle: "MP v OM"
+subtitle: "Comparison of biomass stock assessment with OM"
 author: "Laurie"
 date: "05/04/2015"
 output: html_document
 ---
+
+A major task of a stock assessment working group is to get the best fit to the data. This normally involves choosing a range of scenarios, e.g. related to time series used or fixing difficult to estimate parameters. Goodness of fit diagnostics such as the likelihood and AIC may not help if datasets and model configurations vary or there is little information in the data. 
+
+Therefore we use simulation to generate a range of scenario (i.e. possible, plausible, internally consistent, but not necessarily probable, developments) based on Multifan-CL as the operating model (OM) and use these to generate data for fitting a biomass dynamic stock assessment model. We do this for two stock assessment options, i.e. choice of the shape parameter in the Pella-Tomlinson production function and the length of the time series.
+
+There were two choices for the production function, i) known, i.e. the same as in the OM and ii) p=1, i.e. a symetric production function equilvalent to the logistic. And two length of the time series from i) 1950 and ii) 1975 since there appears to have been a regime shift in the later period. 
+
 
 ```{r, echo=FALSE}
 library(knitr)
@@ -19,7 +26,7 @@ opts_chunk$set(comment=NA, fig.width =6,
                            cache  =!FALSE)
 ```
 
-```{rinit}
+```{r}
 library(FLCore)
 library(ggplotFL)
 library(reshape)
@@ -31,49 +38,12 @@ library(popbio)
 
 theme_set(theme_bw(base_size=10))
 
-end  =2041
-start=1975
-
 dirDat="c:/temp/albn/data"
 dirDat="/home/laurie/MEGAsync/mse/albn/data"
 
 load(paste(dirDat,"/om.RData",sep=""))
 
-r<-function(x){
-  f   =c(FLBRP:::refpts(x)["crash","harvest"])
-  if (is.na(f)) 
-      f=c(refpts(x)["msy","harvest"])*3
-                                  
-  r=try(log(lambda(leslie(x,f))))
-  if (class(r)=="try-error") 
-      r=NA  
-  r}
-
-priorFn<-function(x){
-  
-  # production function based ob S/R
-  msy =c(FLBRP:::refpts(x)["msy",   "yield"])
-  bmsy=c(FLBRP:::refpts(x)["msy",   "biomass"])
-  
-  r=r(x)
-  k   =c(FLBRP:::computeRefpts(x)["virgin","biomass"])
-  p   =optimise(function(p,bmsy,k) 
-                (bmsy-k*(1/(1+p))^(1/p))^2, c(0.001,5), 
-                bmsy=bmsy,k=k)$minimum
-
-  kPrime=bmsy/((1/(1+p))^(1/p))
-  rPrime=msy/(k*(1/(1+p))^(1/p+1))
-  
-  cbind(p=p,
-        r     =r,     k     =k,
-        rPrime=rPrime,kPrime=kPrime,
-        msy=msy,bmsy=bmsy,fmsy=msy/bmsy)}
-
-priors=ldply(eql,priorFn)
-priors=cbind(priors,mdply(seq(length(om)), 
-              function(i) 
-                data.frame(b0=mean(stock(om[[i]])[,ac(1975:1980)]))))[,-10]
-priors=transform(priors,b0=pmin(b0/k,0.8))
+source('~/MEGAsync/mse/albn/R/mse-funcs.R')
 ```
 
 ```{r}
@@ -128,7 +98,7 @@ fitBd<-function(om,eql,priors,
   bd=fwd(bd,catch=catch(bd))
   
   u =window((stock(om)[,- dim(stock(om))[2]]+
-             stock(om)[,-1])/2,start=20)
+             stock(om)[,-1])/2,start=start)
 
   setParams(bd)=u
   setControl(bd)=params(bd)
@@ -183,80 +153,313 @@ goodFn<-function(det){
   good[do.call(order,list(V1=good[,"V1"])),]}
 ```
 
-```{ralbn-sa-det}
+```{r}
 runs=expand.grid(i    =seq(length(om)),
                  rMult=1.5,
                  fixQ =!as.logical(TRUE),
                  prr  ="")
 
+u=FLQuants(llply(om,function(x) window(stock(x),start=1950)))
+u=FLQuants(llply(u, function(x) rlnorm(100,log(x),.2)))
+```
+
+
+# Shape of production function known 
+## Truncate data at 1975 
+
+```{r albn-sa1975-det}
+start=1975
+p    =NULL
+
+priors=ldply(eql,priorFn,p=p)
+priors=cbind(priors,mdply(seq(length(om)), 
+              function(i) 
+                data.frame(b0=mean(stock(window(om[[i]],start=start))[,1:10]))))[,-10]
+priors=transform(priors,b0=pmin(b0/k,0.8))
+
 det=mdply(runs,
           function(i,rMult,fixQ,prr){
-            #print(paste(i,rMult,prr))
-                fitBd(window(om[[i]],start=1975),
+                fitBd(window(om[[i]],start=start),
                       eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult)})
 ggplot(det)+
   geom_line(aes(year,omB,group=i))+
-  geom_line(aes(year,mpB,group=i),col="red")
+  geom_line(aes(year,mpB,group=i),col="red")+
+  xlab("Year")+ylab("Stock Biomass")+theme_bw()
 ```
 
-**Figure 1** Deterministic comparison between OM and MP.
+**Figure 1a** Deterministic comparison of biomass assessment in MP and OM, for p known and truncated time series.
 
-```{ralbn-sa-stochastic,fig.height=8}
+```{r albn-sa1975-stochastic,fig.height=8}
 sa=biodyns(mlply(runs,
           function(i,rMult,fixQ,prr){
             #print(paste(i,rMult,prr))
-                fitBd(window(om[[i]],start=1975),
+                fitBd(window(om[[i]],start=start),
                       eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult,
                       rtn=function(x,y) y)}))
-
-u=FLQuants(llply(om,function(x) window(stock(x),start=1975)))
-u=FLQuants(llply(u, function(x) rlnorm(100,log(x),.2)))
 
 sa=biodyns(mlply(seq(length(sa)), function(i) {
   catch(sa[[i]])=propagate(catch(sa[[i]]),100)
   fit(sa[[i]],u[[i]])}))
-names(sa)=names(om)
 
-save(sa,u,file=paste(dirDat,"sa.RData",sep="/"))
+names(sa)=names(om)
+save(sa,file=paste(dirDat,"sa1975.RData",sep="/"))
+
+ggplot(rbind.fill(cbind(What="MP",plot(FLQuants(llply(sa,stock)),na.rm=TRUE)$data),
+                  cbind(What="OM",plot(FLQuants(llply(om,stock)),na.rm=TRUE)$data)))+
+       geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
+       geom_line(aes(year,`50%`,col=What))+
+       facet_wrap(~qname,ncol=2)+
+  xlab("Year")+ylab("Stock Biomass")+theme_bw()
+```
+
+**Figure 1b** Stochastic comparison of biomass assessment in MP and OM, for p known and truncated time series.
+
+
+```{r albn-sa1975-rel,fig.height=8}
+
+ggplot(rbind.fill(
+  cbind(What="MP",plot(FLQuants(llply(sa,function(x) 
+    stock(x)%/%bmsy(x))),na.rm=TRUE)$data),
+  cbind(What="OM",plot(FLQuants(llply(eql,   function(x)
+    biomass.obs(x)%/%FLBRP:::refpts(x)["msy","biomass"])),na.rm=TRUE)$data)))+
+       geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
+       geom_line(aes(year,`50%`,col=What))+
+       geom_hline(aes(yintercept=1))+
+       facet_wrap(~qname,ncol=2)+
+       xlab("Year")+ylab("Stock Biomass")+theme_bw()
+```
+
+**Figure 1c** Stochastic comparison relative to BMSY of biomass assessment in MP and OM, for p known and truncated time series.
+
+
+## Truncate data at 1950 
+
+```{r albn-sa1950-det}
+start=1950
+p    =NULL
+
+priors=ldply(eql,priorFn,p=p)
+priors=cbind(priors,mdply(seq(length(om)), 
+              function(i) {
+                data.frame(b0=mean(stock(window(om[[i]],start=start))[,1:10]))
+                }))[,-10]
+priors=transform(priors,b0=pmin(b0/k,0.8))
+
+det=mdply(runs,
+          function(i,rMult,fixQ,prr){
+                fitBd(window(om[[i]],start=start),
+                      eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult)})
+ggplot(det)+
+  geom_line(aes(year,omB,group=i))+
+  geom_line(aes(year,mpB,group=i),col="red")+
+  xlab("Year")+ylab("Stock Biomass")+theme_bw()
+```
+
+**Figure 2a** Deterministic comparison of biomass assessment in MP and OM, for p known  and time series starting in 1950.
+
+```{r albn-sa1950-stochastic,fig.height=8}
+sa=biodyns(mlply(runs,
+          function(i,rMult,fixQ,prr){
+            #print(paste(i,rMult,prr))
+                fitBd(window(om[[i]],start=start),
+                      eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult,
+                      rtn=function(x,y) y)}))
+
+sa=biodyns(mlply(seq(length(sa)), function(i) {
+  catch(sa[[i]])=propagate(catch(sa[[i]]),100)
+  fit(sa[[i]],u[[i]])}))
+
+names(sa)=names(om)
+save(sa,file=paste(dirDat,"sa1950.RData",sep="/"))
+
+ggplot(rbind.fill(cbind(What="MP",plot(FLQuants(llply(sa,stock)),na.rm=TRUE)$data),
+                  cbind(What="OM",plot(FLQuants(llply(om,stock)),na.rm=TRUE)$data)))+
+       geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
+       geom_line(aes(year,`50%`,col=What))+
+       facet_wrap(~qname,ncol=2)+
+  xlab("Year")+ylab("Stock Biomass")+theme_bw()
+```
+
+**Figure 2b** Stochastic comparison of biomass assessment in MP and OM, for p known  and time series starting in 1950.
+
+
+```{r albn-sa1950-rel,fig.height=8}
+
+ggplot(rbind.fill(
+  cbind(What="MP",plot(FLQuants(llply(sa,function(x) 
+    stock(x)%/%bmsy(x))),na.rm=TRUE)$data),
+  cbind(What="OM",plot(FLQuants(llply(eql,   function(x)
+    biomass.obs(x)%/%FLBRP:::refpts(x)["msy","biomass"])),na.rm=TRUE)$data)))+
+       geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
+       geom_line(aes(year,`50%`,col=What))+
+       geom_hline(aes(yintercept=1))+
+       facet_wrap(~qname,ncol=2)+
+       xlab("Year")+ylab("Stock Biomass")+theme_bw()
+```
+
+**Figure 2c** Stochastic comparison relative to BMSY of biomass assessment in MP and OM, for p known and time series starting in 1950.
+
+# Shape of production assumed to be equal to 1 (i.e. logistic) 
+## Truncate data at 1975 
+
+```{r albn-sa1975p1-det}
+start=1975
+p    =1
+
+priors=ldply(eql,priorFn,p=p)
+priors=cbind(priors,mdply(seq(length(om)), 
+              function(i) 
+                data.frame(b0=mean(stock(window(om[[i]],start=start))[,1:10]))))[,-10]
+priors=transform(priors,b0=pmin(b0/k,0.8))
+
+det=mdply(runs,
+          function(i,rMult,fixQ,prr){
+                fitBd(window(om[[i]],start=start),
+                      eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult)})
+ggplot(det)+
+  geom_line(aes(year,omB,group=i))+
+  geom_line(aes(year,mpB,group=i),col="red")+
+  xlab("Year")+ylab("Stock Biomass")+theme_bw()
+```
+
+**Figure 3a** Deterministic comparison of biomass assessment in MP and OM, for p=1 and truncated time series.
+
+```{r albn-sa1975p1-stochastic,fig.height=8}
+sa=biodyns(mlply(runs,
+          function(i,rMult,fixQ,prr){
+            #print(paste(i,rMult,prr))
+                fitBd(window(om[[i]],start=start),
+                      eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult,
+                      rtn=function(x,y) y)}))
+
+sa=biodyns(mlply(seq(length(sa)), function(i) {
+  catch(sa[[i]])=propagate(catch(sa[[i]]),100)
+  fit(sa[[i]],u[[i]])}))
+
+names(sa)=names(om)
+save(sa,file=paste(dirDat,"sa1975p1.RData",sep="/"))
+
+ggplot(rbind.fill(cbind(What="MP",plot(FLQuants(llply(sa,stock)),na.rm=TRUE)$data),
+                  cbind(What="OM",plot(FLQuants(llply(om,stock)),na.rm=TRUE)$data)))+
+       geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
+       geom_line(aes(year,`50%`,col=What))+
+       facet_wrap(~qname,ncol=2)+
+  xlab("Year")+ylab("Stock Biomass")+theme_bw()
+```
+
+**Figure 3b** Stochastic comparison of biomass assessment in MP and OM, for p=1 and truncated time series.
+
+
+```{r albn-sa1975p1-rel,fig.height=8}
+ggplot(rbind.fill(
+  cbind(What="MP",plot(FLQuants(llply(sa,function(x) 
+    stock(x)%/%bmsy(x))),na.rm=TRUE)$data),
+  cbind(What="OM",plot(FLQuants(llply(eql,   function(x)
+    biomass.obs(x)%/%FLBRP:::refpts(x)["msy","biomass"])),na.rm=TRUE)$data)))+
+       geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
+       geom_line(aes(year,`50%`,col=What))+
+       geom_hline(aes(yintercept=1))+
+       facet_wrap(~qname,ncol=2)+
+       xlab("Year")+ylab("Stock Biomass")+theme_bw()
+```
+
+**Figure 3c** Stochastic comparison relative to BMSY of biomass assessment in MP and OM, for p=1 and truncated time series.
+
+## Truncate data at 1950 
+
+```{r albn-sa1950p1-det}
+start=1950
+p    =1
+
+priors=ldply(eql,priorFn,p=p)
+priors=cbind(priors,mdply(seq(length(om)), 
+              function(i) {
+                data.frame(b0=mean(stock(window(om[[i]],start=start))[,1:10]))
+                }))[,-10]
+priors=transform(priors,b0=pmin(b0/k,0.8))
+
+det=mdply(runs,
+          function(i,rMult,fixQ,prr){
+                fitBd(window(om[[i]],start=start),
+                      eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult)})
+ggplot(det)+
+  geom_line(aes(year,omB,group=i))+
+  geom_line(aes(year,mpB,group=i),col="red")+
+  xlab("Year")+ylab("Stock Biomass")+theme_bw()
+```
+
+**Figure 4a** Deterministic comparison of biomass assessment in MP and OM, for p=1  and time series starting in 1950.
+
+```{r albn-sa1950p1-stochastic,fig.height=8}
+sa=biodyns(mlply(runs,
+          function(i,rMult,fixQ,prr){
+            #print(paste(i,rMult,prr))
+                fitBd(window(om[[i]],start=start),
+                      eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult,
+                      rtn=function(x,y) y)}))
+
+sa=biodyns(mlply(seq(length(sa)), function(i) {
+  catch(sa[[i]])=propagate(catch(sa[[i]]),100)
+  fit(sa[[i]],u[[i]])}))
+
+names(sa)=names(om)
+save(sa,file=paste(dirDat,"sa1950p1.RData",sep="/"))
+
+ggplot(rbind.fill(cbind(What="MP",plot(FLQuants(llply(sa,stock)),na.rm=TRUE)$data),
+                  cbind(What="OM",plot(FLQuants(llply(om,stock)),na.rm=TRUE)$data)))+
+       geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
+       geom_line(aes(year,`50%`,col=What))+
+       facet_wrap(~qname,ncol=2)+
+  xlab("Year")+ylab("Stock Biomass")+theme_bw()
+```
+
+**Figure 4b** Stochastic comparison of biomass assessment in MP and OM, for p=1  and time series starting in 1950.
+
+
+```{r albn-sa1950p1-rel,fig.height=8}
+
+ggplot(rbind.fill(
+  cbind(What="MP",plot(FLQuants(llply(sa,function(x) 
+    stock(x)%/%bmsy(x))),na.rm=TRUE)$data),
+  cbind(What="OM",plot(FLQuants(llply(eql,   function(x)
+    biomass.obs(x)%/%FLBRP:::refpts(x)["msy","biomass"])),na.rm=TRUE)$data)))+
+       geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
+       geom_line(aes(year,`50%`,col=What))+
+       geom_hline(aes(yintercept=1))+
+       facet_wrap(~qname,ncol=2)+
+       xlab("Year")+ylab("Stock Biomass")+theme_bw()
+```
+
+**Figure 4c** Stochastic comparison relative to BMSY of biomass assessment in MP and OM, for p=1 and time series starting in 1950.
+
+```{r albn-sa-prj,fig.height=8,eval=FALSE}
+srDev=rlnorm(100,FLQuant(0,dimnames=list(year=2012:2041)))
+o=fwdWindow(om[["Base"]],end=2041,eql[["Base"]])
+o=fwd(o,f=FLQuant(c(FLBRP:::refpts(eql[["Base"]])["msy","harvest"]*0.7),
+                            dimnames=list(year=2012:2041)),
+                            sr=eql[["Base"]],
+                            sr.residuals=srDev*.6)
+
+names(counterfactual)=names(om)          
+plot(FLQuants(llply(counterfactual[-6],stock))) +
+  facet_wrap(~qname,scale="free")
+
+u=FLQuants(llply(om,function(x) window(stock(x),start=start)))
+u=FLQuants(llply(u, function(x) rlnorm(100,log(x),.2)))
+
+load(paste(dirDat,"sa.RData",sep="/"))
+sa=biodyns(mlply(seq(length(sa)), function(i) {
+  catch(sa[[i]])=propagate(catch(sa[[i]]),100)
+  fit(sa[[i]],u[[i]])}))
+names(sa)=names(om)
 
 ggplot(rbind.fill(cbind(What="MP",plot(FLQuants(llply(sa,stock)))$data),
                   cbind(What="OM",plot(FLQuants(llply(om,stock)))$data)))+
        geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
        geom_line(aes(year,`50%`,col=What))+
        facet_wrap(~qname,ncol=2)
+
+**Figure 9** Comparison of stochastic CPUE MP and deterministic OM with regime shift.
 ```
 
-**Figure 2** Comparison of stochastic CPUE MP and deterministic OM.
-
-
-```{ralbn-sa-counterfactual}
-srDev=rlnorm(100,FLQuant(0,dimnames=list(year=2012:2041)))
-counterfactual=FLStocks(mlply(seq(length(om)),
-      function(i){
-            o=fwdWindow(om[[i]],end=2041,eql[[i]])
-            o=fwd(o,f=FLQuant(c(FLBRP:::refpts(eql[[i]])["msy","harvest"]),
-                            dimnames=list(year=2012:2041)),
-                            sr=eql[[i]],
-                            sr.residuals=srDev)
-            o}))
-
-names(counterfactual)=names(om)          
-plot(FLQuants(llply(counterfactual[-6],stock))) +
-  facet_wrap(~qname,scale="free")
-```
-
-**Figure 3** Counterfactual OM stock, i.e. perfect FMSY
-
-```{ralbn-sa-counterfactual-catch}
-plot(FLQuants(llply(counterfactual[-6],catch))) +
-  facet_wrap(~qname,scale="free")+
-  scale_x_continuous(limits=c(2000,2041))
-```
-
-**Figure 4** Counterfactual OM catch, i.e. perfect FMSY
-
-```{r}
-
-save(sa,priors,file=paste(dirDat,"sa.RData",sep="/"))
-```
 
