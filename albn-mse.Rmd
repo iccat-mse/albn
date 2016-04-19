@@ -1,0 +1,88 @@
+---
+title: ""
+output:
+  rmdformats::html_clean:
+    fig_width: 6
+    fig_height: 6
+    highlight: pygments
+---
+
+
+```{r knitr_init, echo=FALSE, cache=FALSE}
+library(knitr)
+library(rmdformats)
+
+## Global options
+options(max.print="75")
+opts_chunk$set(echo=FALSE,
+	             cache=TRUE,
+               prompt=FALSE,
+               tidy=TRUE,
+               comment=NA,
+               message=FALSE,
+               warning=FALSE)
+opts_knit$set(width=75)
+```
+
+# Introduction
+# Scientific Advice
+## Assessment
+SCRS/2016/026 Cross testing of biodyn an R Package to Implement Management Procedures Based on Biomass Dynamic Models
+
+SCRS/2016/027  Validation of biodyn, an R Package to Implement Management Procedures Based on Biomass Dynamic Models.
+
+SCRS/2016/028 A Preliminary Stock Assessment for North Atlantic Albacore Using a Biomass Dynamic Model.
+
+
+    The logistic production function is probably not appropriate for many species \citep[e.g. due to high steepness {maunder2003time}, and a Pell-Tomlinson form with B_{MSY}<0.5B_0 is probably more realistic the actual degree of asymmetry is uncertain. This is because the shape depends on the steepness of the stock recruitment relationship and natural mortality, parameters that are very difficult to estimate even in data rich assessments. The assumed shape of the production function is asymmetry will result in catches not declining at low depletion levels. Assuming logistic in the assessment, when in reality the function is asymmetric will also cause problems in bimodality. If you have data from the RH limb of the curve, i.e. when you are in the green K2PP and base your assessment on those data and a logistic curve. Then you get more data from the red quadrant and still assume logistic the curve will flip, i.e. you are now fitting to the LH limb. 
+## Kobe Framework
+
+I have copied Haritz in hope you dont mind. I will also take all the points below and incorporate into a summary of the papers for the WG
+
+On 15/04/16 09:56, Gorka Merino wrote:
+>
+> So, in the exercise evaluating HCRs that we presented in the WGSAM we had two main issues: CPUE and shape. With these papers we are showing that the results with a juvenile or total biomass CPUE are very similar, we can address the main concern from Craig. 
+Yes, I said at WGSAM based on analysis was that Craigs concerns WRT indices, i.e. selection pattern and truncating the time series had been evaluated and shown not to be important. However, the shape of the production function was potentially important.
+
+    The logistic production function is probably not appropriate for many species \citep[e.g. due to high steepness {maunder2003time}, and a Pell-Tomlinson form with B_{MSY}<0.5B_0 is probably more realistic the actual degree of asymmetry is uncertain. This is because the shape depends on the steepness of the stock recruitment relationship and natural mortality, parameters that are very difficult to estimate even in data rich assessments. The assumed shape of the production function is asymmetry will result in catches not declining at low depletion levels. Assuming logistic in the assessment, when in reality the function is asymmetric will also cause problems in bimodality. If you have data from the RH limb of the curve, i.e. when you are in the green K2PP and base your assessment on those data and a logistic curve. Then you get more data from the red quadrant and still assume logistic the curve will flip, i.e. you are now fitting to the LH limb. 
+>
+> With the truncated time series issue, which I don’t think is a major issue in these results, although it could be for the coming assessment, we show that it is better to truncate than to not, which also addresses Michael’s comments.
+
+    In srcs-2016-023 we show quite clearly that there are regime shifts, using a peer review method. There are also long-term fluctuations due to process error which caused problems, This is again shown in 023 & 027 (cross testing). So truncating performs better than using the total time series. Which has been shown using simulation.
+
+
+> With regards to the shape, a concern that only ourselves have, because it was not detected by the WGSAM, in the runs I did yesterday, we got similar results by fixing the shape to a value very much skewed to the left (0.001<p<0.01), but worse results when using the logistic (p=1) or values only moderately skewed (p>0.1). This supports the use of biodyn against aspic with p=1, as done in 2013.
+>
+>  
+
+    There are some important points WRT shape, that we still need to think about. i.e. thats why Craig and Michaels fixations were a cul-de-sac.
+>
+> In my opinion, although the convergence issues in the biodyn fits done in that framework, and with aspic in 2013, the paper we presented in the WGSAM, and the results, may be refined but not completely thrashed. Haritz has asked if I planned to make some changes as suggested by the WGSAM, remove it or rewrite it. According to papers 24-27, the two major concers (CPUE and shape) may not be that relevant. Morevoer, if the papers demonstrate that using the truncated time series was a good decision. I would prefer to make some additions (runs with different shapes) or something else but not change completely or remove. What do you think?
+
+    The problem with the 2013 ASPIC was non convergence and instability due to use of LAV
+
+>  
+>
+> With regards to the new assessment, yes, if we finally get it, that would be great and hopefully incorporated in the new MSE, may be for another paper.
+>
+>  
+
+
+The main problem is that the MSE and WG assessment are running in parallel, when they should converge. We cant simulation test the 2013 assessment as it is unstable and unreliable, however, the MSE runs perfectly. Why is the MSE so good? because we have tested the Stock Assessment (SA) method and made it robust! What to do? Use the knowledge we now have about what makes an assessment robust (i.e. reliable and stable) and then transfer that knowledge into conducting the assessment, which we then simulation test in the MSE.
+# MSE
+## Software
+
+## OM
+SCRS/2016/023 Conditioning An Operating Model For North Atlantic Albacore.  
+
+![OMs](/home/laurie/Desktop/scrs-2016/papers/scrs-2016-023/tex/albn-om-1.png)
+
+## OEM
+SCRS/2016/024 An Observation Error Model For North Atlantic Albacore.
+
+## MP
+SCRS/2016/025 The Implicit North Atlantic Albacore Management Procedure.
+
+## Performance Stats
+
+# Bibliography
