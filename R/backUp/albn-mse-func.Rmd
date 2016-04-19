@@ -1,0 +1,272 @@
+---
+title: "Albacore MSE"
+subtitle: "MP v OM"
+author: "Laurie"
+date: "05/04/2015"
+output: word_document
+---
+
+```{r, echo=FALSE}
+library(knitr)
+
+opts_chunk$set(comment=NA, fig.width =6, 
+                           fig.height=4,
+                           fig.path  ="../tex",
+                           warning=FALSE, 
+                           message=FALSE, 
+                           error  =FALSE, 
+                           echo   =FALSE,
+                           cache  =!FALSE)
+```
+
+```{r}
+library(FLCore)
+library(ggplotFL)
+library(reshape)
+library(plyr)
+library(kobe)
+library(FLBRP)
+library(biodyn)
+library(popbio)
+
+theme_set(theme_bw(base_size=10))
+
+## Summary Plot
+omMp=function(om,sa,end=range(sa)["maxyear"]){
+  ggplot(rbind.fill(cbind(What="MP",plot(FLQuants(sa,"stock"))$data),
+                    cbind(What="OM",plot(FLQuants(om,"stock"))$data)))+
+         geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
+         geom_line(aes(year,`50%`,col=What))+
+         facet_wrap(~qname,ncol=2)+
+         scale_x_continuous(limits=c(1975,end))}
+
+dirDat="/home/laurie/MEGAsync/mse/albn/data"
+
+load(paste(dirDat,"/om.RData",    sep=""))
+load(paste(dirDat,"/sa.RData",sep=""))
+nits  =100
+
+range=c("start"=2007,"end"=2007+30,"interval"=3)  
+
+srDev =0.3
+ uDev =0.2        
+```
+
+```{r}
+setGeneric('hcr', function(object,...) standardGeneric('hcr'))
+setMethod('hcr', signature(object='biodyn'),
+ function(object, 
+           params=hcrParam(ftar =0.70*refpts(object)['fmsy'],
+                           btrig=0.80*refpts(object)['bmsy'],
+                           fmin =0.01*refpts(object)['fmsy'],
+                           blim =0.40*refpts(object)['bmsy']),
+           stkYrs=max(as.numeric(dimnames(stock(object))$year)),
+           refYrs=max(as.numeric(dimnames(catch(object))$year)),
+           hcrYrs=max(as.numeric(dimnames(stock(object))$year)),
+           tac   =FALSE,
+           tacMn =TRUE,
+           bndF  =NULL, #c(1,Inf),
+           bndTac=NULL, #c(1,Inf),
+           iaF   =TRUE, 
+           iaTac =TRUE, 
+           maxF  =2,
+           ...) {
+  ## HCR
+  dimnames(params)$params=tolower(dimnames(params)$params)
+  params=as(params,'FLQuant')  
+  #if (blim>=btrig) stop('btrig must be greater than blim')
+  a=(params['ftar']-params['fmin'])/(params['btrig']-params['blim'])
+  b=params['ftar']-a*params['btrig']
+
+  ## Calc F
+  # bug
+  #val=(SSB%*%a) %+% b
+  stk=FLCore::apply(stock(object)[,ac(stkYrs)],6,mean)
+  
+  rtn=(stk%*%a)  
+  rtn=FLCore::sweep(rtn,2:6,b,'+')
+
+  fmin=as(params['fmin'],'FLQuant')
+  ftar=as(params['ftar'],'FLQuant')
+  for (i in seq(dims(object)$iter)){
+    FLCore::iter(rtn,i)[]=max(FLCore::iter(rtn,i),FLCore::iter(fmin,i))
+    FLCore::iter(rtn,i)[]=min(FLCore::iter(rtn,i),FLCore::iter(ftar,i))} 
+  
+  rtn=window(rtn,end=max(hcrYrs))
+  #dimnames(rtn)$year=min(hcrYrs)  
+  if (length(hcrYrs)>1){
+    rtn=window(rtn,end=max(hcrYrs))
+    rtn[,ac(hcrYrs)]=rtn[,dimnames(rtn)$year[1]]}
+  
+  ### Bounds ##################################################################################
+  ## F
+  if (!is.null(bndF)){  
+
+      ref=FLCore::apply(harvest(object)[,ac(refYrs-1)],6,mean)
+    
+      rtn[,ac(min(hcrYrs))]=qmax(rtn[,ac(min(hcrYrs))],ref*bndF[1])
+      rtn[,ac(min(hcrYrs))]=qmin(rtn[,ac(min(hcrYrs))],ref*bndF[2])
+    
+      if (length(hcrYrs)>1)        
+        for (i in hcrYrs[-1]){
+          if (iaF){
+            rtn[,ac(i)]=qmax(rtn[,ac(i)],rtn[,ac(i-1)]*bndF[1])
+            rtn[,ac(i)]=qmin(rtn[,ac(i)],rtn[,ac(i-1)]*bndF[2])
+          }else{
+            rtn[,ac(i)]=rtn[,ac(i-1)]}
+  
+      if (!is.null(maxF)) rtn=qmin(rtn,maxF)}}
+   hvt=rtn
+  
+   
+   ## TAC
+   if (tac){
+     
+      ref=FLCore::apply(catch(object)[,ac(refYrs)],6,mean)
+
+      object=window(object, end=max(as.numeric(hcrYrs)))
+      object=fwd(object,harvest=harvest(object)[,ac(min(as.numeric(hcrYrs)-1))])
+     
+      rtn   =catch(fwd(object, harvest=rtn))[,ac(hcrYrs)]
+
+      if (!is.null(bndTac)){  
+        rtn[,ac(min(hcrYrs))]=qmax(rtn[,ac(min(hcrYrs))],ref*bndTac[1])
+        rtn[,ac(min(hcrYrs))]=qmin(rtn[,ac(min(hcrYrs))],ref*bndTac[2])
+
+        if (length(hcrYrs)>1)        
+          for (i in hcrYrs[-1]){
+            if (iaTac){
+              rtn[,ac(i)]=qmax(rtn[,ac(i)],rtn[,ac(i-1)]*bndTac[1])
+              rtn[,ac(i)]=qmin(rtn[,ac(i)],rtn[,ac(i-1)]*bndTac[2])
+            }else{
+              rtn[,ac(i)]=rtn[,ac(i-1)]}}
+      
+      if (tacMn) rtn[]=c(apply(rtn,3:6,mean))}}
+  
+      if (tac) rtn=list(hvt=hvt,tac=rtn,stock=stk) else rtn=list(hvt=hvt,stock=stk)
+  
+  return(rtn)})
+
+
+```
+
+```{rrun}
+runMSE<-function(om,eql,
+                 sa,hcr,
+                 srDev,uCV,
+                 range=c(start   =dims(om)$maxyear,
+                         end     =dims(om)$maxyear+30,
+                         interval=3),
+                 maxF=2,
+                 iaF=.1,
+                 cmdOps='-maxfn 500 -iprint 0 -est'){
+ 
+  ## OM projections
+  om  =fwdWindow(om,end=range["end"],eql)
+ 
+  ## F in longterm
+  prj=FLQuant(c(FLBRP:::refpts(eql)['msy','harvest']*hcr['ftar']),
+                         dimnames=list(year=range["start"]:range["end"],
+                                       iter=seq(nits)))
+  
+  ## Add stochastcity
+  if (!(srDev%in%"FLQuant"))
+  srDev=rlnorm(nits,FLQuant(0,
+            dimnames=list(year=range["start"]:range["end"])),srDev)
+  om =fwd(om,f=prj, sr=eql,sr.residuals=srDev)
+  prj=om
+
+  ## Get number of iterations in OM
+  nits=c(om=dims(om)$iter, eql=dims(params(eql))$iter, rsdl=dims(srDev)$iter)
+  if (length(unique(nits))>=2 & !(1 %in% nits)) 
+    ("Stop, iters not '1 or n' in OM")
+  if (nits['om']==1) stock(om)=propagate(stock(om),max(nits))
+
+  ## Cut in capacity
+  maxF=FLQuant(c(apply(fbar(window(om,end=range["start"])),6,mean))*maxF,
+               dimnames=dimnames(srDev))
+   
+  #### Observation Error (OEM) setup #######################
+  ## Random variation for CPUE  
+  cpue=oem(window(om,end=range["start"]),0.3)
+  
+  ## use data from last year
+  cpue=window(cpue,end=range["start"]-1)
+  cpue[,ac(range["start"]-(range["interval"]:1))]=oem(om[,ac(range["start"]-(range["interval"]:1))],uDev)
+    
+  #### Management Procedure
+  ## Set up assessment parameter options
+  mp=biodyn:::FLStock2biodyn(window(om,end=range["start"]-1))
+  pnms=dimnames(control(sa))$param[dimnames(control(sa))$param%in%
+                                     dimnames(params(mp))$params]
+  params(mp)[pnms]=apply(sa@params[pnms],1,median)
+
+  setParams( mp)=cpue 
+  setControl(mp)=params(mp)
+
+  ## Loop round years
+  for (iYr in seq(range["start"],range["end"]-range["interval"],range["interval"])){
+    cat('\n===================', iYr, '===================\n')
+
+    ## use data from last year
+    mp=window(mp,end=iYr)
+    cpue=window(cpue,end=iYr-1)
+    cpue[,     ac(iYr-(range["interval"]:1))]=oem(  om[,ac(iYr-(range["interval"]:1))],uDev)
+    catch(mp)[,ac(iYr-(range["interval"]:1))]=catch(om[,ac(iYr-(range["interval"]:1))])        
+    
+    ## fit
+    ##mmm<<-list(om=om,mp=mp,prj=prj,cpue=cpue)
+    #mp =biodyn::fwd(mp,catch=catch(mp))
+    catch(mp)[is.na(catch(mp))]=0.01
+    mp=biodyn::fit(mp,cpue,cmdOps=cmdOps)
+    
+    ## HCR
+    hcrPar=hcrParam(ftar =hcr["ftar" ]*fmsy(mp),
+                    btrig=hcr["btrig"]*bmsy(mp),
+                    fmin =hcr["fmin" ]*fmsy(mp), 
+                    blim =hcr["blim" ]*bmsy(mp))
+    hcrOutcome=biodyn::hcr(mp,hcrPar,
+                   hcrYrs=iYr+seq(range["interval"]),
+                   tac =TRUE)
+            
+    ## TACs for next year (iYtr+1) for n=interval years
+    TAC  =hcrOutcome$tac
+    TAC[]=rep(apply(TAC,6,mean)[drop=T],each=range["interval"])
+    
+    #### Operating Model Projectionfor TAC
+    om =FLash:::fwd(om,catch=TAC,maxF=maxF*10,sr=eql,sr.residuals=srDev)  
+    
+    mmm<<-list(om=om,mp=mp,prj=prj)
+    #print(omMp(om,mp))
+    }
+  
+  return(list(om=om,mp=mp,prj=prj))}
+```
+
+
+```{rrun}
+res1=runMSE(window(om[[ "Base"]],start=1975),
+            eql[["Base"]],
+            sa[[ "Base"]],
+            range=c("start"=2007,"end"=2007+30,"interval"=3),
+            hcr=c(ftar=0.7,fmin=0.01,blim=0.4,btrig=0.8),
+            srDev=0.3,uCV=0.2,maxF=1)
+omMp(res1$om,res1$mp)    
+save(res1,file=paste(dirDat,"res1.RData",sep="/"))
+```
+
+**Figure 1** HCR
+
+```{rrun}
+res2=runMSE(window(om[[ "Base"]],start=1975),
+            eql[["Base"]],
+            sa[[ "Base"]],
+            range=c("start"=2007,"end"=2007+30,"interval"=3),
+            hcr=c(ftar=1,fmin=0.01,blim=0.4,btrig=0.8),
+            srDev=0.3,uCV=0.2,maxF=1)
+omMp(res2$om,res2$mp)    
+save(res2,file=paste(dirDat,"res2.RData",sep="/"))
+```
+
+**Figure 2** HCR
+

@@ -1,0 +1,442 @@
+---
+title: "Albacore MSE"
+subtitle: "MP v OM"
+author: "Laurie"
+date: "05/04/2015"
+output: html_document
+---
+
+```{r, echo=FALSE}
+library(knitr)
+
+opts_chunk$set(comment=NA, fig.width =6, 
+                           fig.height=4,
+                           fig.path  ="../tex/",
+                           warning=FALSE, 
+                           message=FALSE, 
+                           error  =FALSE, 
+                           echo   =FALSE,
+                           cache  =!FALSE)
+```
+
+```{r}
+library(FLCore)
+library(ggplotFL)
+library(reshape)
+library(plyr)
+library(kobe)
+library(FLBRP)
+library(biodyn)
+library(popbio)
+
+theme_set(theme_bw(base_size=10))
+
+dirDat="c:/temp/albn/data"
+dirDat="/home/laurie/MEGAsync/mse/albn/data"
+
+load(paste(dirDat,"/om.RData",sep=""))
+
+r<-function(x){
+  f   =c(FLBRP:::refpts(x)["crash","harvest"])
+  if (is.na(f)) 
+      f=c(refpts(x)["msy","harvest"])*3
+                                  
+  r=try(log(lambda(leslie(x,f))))
+  if (class(r)=="try-error") 
+      r=NA  
+  r}
+
+priorFn<-function(x,p=NULL){
+  
+  # production function based ob S/R
+  msy =c(FLBRP:::refpts(x)["msy",   "yield"])
+  bmsy=c(FLBRP:::refpts(x)["msy",   "biomass"])
+  
+  r=r(x)
+  k   =c(FLBRP:::computeRefpts(x)["virgin","biomass"])
+  
+  if (is.null(p))
+  p   =optimise(function(p,bmsy,k) 
+                (bmsy-k*(1/(1+p))^(1/p))^2, c(0.001,5), 
+                bmsy=bmsy,k=k)$minimum
+
+  kPrime=bmsy/((1/(1+p))^(1/p))
+  rPrime=msy/(k*(1/(1+p))^(1/p+1))
+  
+  cbind(p=p,
+        r     =r,     k     =k,
+        rPrime=rPrime,kPrime=kPrime,
+        msy=msy,bmsy=bmsy,fmsy=msy/bmsy)}
+```
+
+```{r}
+FLBRP2biodyn=function(from){
+  
+  ## age based regference points
+  msy =c(from@refpts["msy",   "yield"])
+  bmsy=c(from@refpts["msy",   "biomass"])
+  k   =c(from@refpts["virgin","biomass"])
+  
+  # biomass based reference points
+  p   =optimise(function(p,bmsy,k) 
+    (bmsy-k*(1/(1+p))^(1/p))^2, c(0.001,5), bmsy=bmsy,k=k)$minimum
+  k=bmsy/((1/(1+p))^(1/p))
+  r=msy/(k*(1/(1+p))^(1/p+1))
+  b0=mean(stock(from)[,1:5]/k)
+  
+  bd=biodyn()
+  
+  bd@params=FLPar(c(r=r,k=k,p=p,b0=b0))
+  
+  bd@catch=catch.obs(from)
+  bd@stock=from@stock.obs
+  
+  range(bd)["minyear"]=dims(bd@catch)$minyear
+  range(bd)["maxyear"]=dims(bd@catch)$maxyear
+  
+  bd}
+
+fitBd<-function(om,eql,priors,
+                fixQ=FALSE,prr="",
+                rMult=1,b0Mult=1,kMult=1,
+                rtn=function(x,y){
+                 model.frame(mcf(FLQuants(
+                            omF=catch(x)/stock(x),
+                            omB=stock(x),
+                            mpF=harvest(y),
+                            mpB=stock(y))),drop=T)})
+  {
+  bd=FLBRP2biodyn(eql)
+  catch(bd)=catch(om)
+  
+  params(bd)[c("r","k","p","b0")]=unlist(c(priors[,c("rPrime","k","p","b0")]))
+  params(bd)["r" ]=params(bd)["r" ]*rMult
+  params(bd)["k" ]=params(bd)["k" ]*kMult
+  params(bd)["b0"]=params(bd)["b0"]*b0Mult
+  
+  bd@stock=FLQuant(c(params(bd)["k"]*params(bd)["b0"]),
+                   dimnames=list(age="all",year=dimnames(stock(om))$year))
+  bd=window(bd,end=dims(stock(om))$maxyear-1)
+  
+  bd=fwd(bd,catch=catch(bd))
+  
+  u =window((stock(om)[,- dim(stock(om))[2]]+
+             stock(om)[,-1])/2,start=start)
+
+  setParams(bd)=u
+  setControl(bd)=params(bd)
+  
+  if (fixQ)
+    control(bd)["q1",c("phase","val")]=c(-1,1)
+
+  if (prr=="q"){
+    bd@priors["q1","weight"]=1
+    bd@priors["q1","a"]     =1 
+  }else if (prr=="bmsy"){
+    bd@priors["bmsy","weight"]=1
+    bd@priors["bmsy","a"]     =priors[,"bmsy"]
+  }else if (prr=="fmsy"){
+    bd@priors["fmsy","weight"]=1
+    bd@priors["fmsy","a"]     =priors[,"fmsy"]
+  }else if (prr=="msy"){
+    bd@priors["msy","weight"]=1
+    bd@priors["msy","a"]     =priors[,"msy"]
+  }else if (prr=="r"){
+    bd@priors["r","weight"]=1
+    bd@priors["r","a"]     =priors[,"r"]
+  }else if (prr=="k"){
+    bd@priors["k","weight"]=1
+    bd@priors["k","a"]     =priors[,"k"]
+  }else if (prr=="rPrime"){
+    bd@priors["r","weight"]=1
+    bd@priors["r","a"]     =priors[,"rPrime"]
+  }else if (prr=="kPrime"){
+    bd@priors["k","weight"]=1
+    bd@priors["k","a"]     =priors[,"kPrime"]}
+
+  bd=fit(bd,u)
+
+  res=rtn(om,bd)
+  
+#   ggplot(res)+
+#     geom_line(aes(year,omB,group=i))+
+#     geom_line(aes(year,mpB,group=i),col="red")
+
+  res
+  }
+
+goodFn<-function(det){
+  
+  rms=ddply(det,.(i,rMult,fixQ,prr),
+            function(x) sum(((x$mpB-x$omB)/x$omB)^2,na.rm=T)/length(x$omB))
+  
+  rms =rms[do.call(order,rms[,c("i","V1")]),]
+  good=rms[!duplicated(rms[,"i"]),]
+  
+  good[do.call(order,list(V1=good[,"V1"])),]}
+```
+
+```{r-albn-sa-det}
+start=1975
+
+priors=ldply(eql,priorFn,p=NULL)
+priors=cbind(priors,mdply(seq(length(om)), 
+              function(i) 
+                data.frame(b0=mean(stock(window(om[[i]],end=start))[,1:10]))))[,-10]
+priors=transform(priors,b0=pmin(b0/k,0.8))
+
+runs=expand.grid(i    =seq(length(om)),
+                 rMult=1.5,
+                 fixQ =!as.logical(TRUE),
+                 prr  ="")
+
+det=mdply(runs,
+          function(i,rMult,fixQ,prr){
+            #print(paste(i,rMult,prr))
+                fitBd(window(om[[i]],start=start),
+                      eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult)})
+ggplot(det)+
+  geom_line(aes(year,omB,group=i))+
+  geom_line(aes(year,mpB,group=i),col="red")
+```
+
+**Figure 1** Deterministic comparison between OM and MP for p known and truncated time series.
+
+```{r-albn-sa-stochastic,fig.height=8}
+sa=biodyns(mlply(runs,
+          function(i,rMult,fixQ,prr){
+            #print(paste(i,rMult,prr))
+                fitBd(window(om[[i]],start=start),
+                      eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult,
+                      rtn=function(x,y) y)}))
+
+u=FLQuants(llply(om,function(x) window(stock(x),start=start)))
+u=FLQuants(llply(u, function(x) rlnorm(100,log(x),.2)))
+
+sa1975=biodyns(mlply(seq(length(sa)), function(i) {
+  catch(sa[[i]])=propagate(catch(sa[[i]]),100)
+  fit(sa[[i]],u[[i]])}))
+names(sa1975)=names(om)
+
+save(sa1975,u,file=paste(dirDat,"sa1975.RData",sep="/"))
+```
+
+```{r}
+ggplot(rbind.fill(cbind(What="MP",plot(FLQuants(llply(sa,stock)),na.rm=TRUE)$data),
+                  cbind(What="OM",plot(FLQuants(llply(om,stock)),na.rm=TRUE)$data)))+
+       geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
+       geom_line(aes(year,`50%`,col=What))+
+       facet_wrap(~qname,ncol=2)
+
+```
+
+**Figure 2a** Comparison of stochastic CPUE MP and deterministic OM for p known and truncated time series.
+
+
+```{r-albn-sa-p1-det}
+ggplot(rbind.fill(
+       cbind(What="MP",
+            plot(FLQuants(mlply(names(sa),function(x) 
+              stock(sa[[x]])%/%bmsy(sa[[x]]))))$data),
+       cbind(What="OM",
+             plot(FLQuants(mlply(names(om), function(x) stock(om[[x]])%/%FLBRP:::refpts(eql[[x]])["msy","biomass"])))$data)))+
+       geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
+       geom_line( aes(year,`50%`,col=What))+
+       geom_hline(aes(yintercept=1))+
+       facet_wrap(~qname,ncol=2)
+```
+
+**Figure 2b** Comparison of stochastic CPUE MP and deterministic OM for p known and truncated time series.
+
+
+```{r-albn-sa-p1-det}
+start=1975
+
+priors=ldply(eql,priorFn,p=1)
+priors=cbind(priors,mdply(seq(length(om)), 
+              function(i) 
+                data.frame(b0=mean(stock(window(om[[i]],end=start))[,1:10]))))[,-10]
+priors=transform(priors,b0=pmin(b0/k,0.8))
+
+runs=expand.grid(i    =seq(length(om)),
+                 rMult=1.5,
+                 fixQ =!as.logical(TRUE),
+                 prr  ="")
+
+det=mdply(runs,
+          function(i,rMult,fixQ,prr){
+            #print(paste(i,rMult,prr))
+                fitBd(window(om[[i]],start=start),
+                      eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult)})
+ggplot(det)+
+  geom_line(aes(year,omB,group=i))+
+  geom_line(aes(year,mpB,group=i),col="red")
+```
+
+**Figure 3** Deterministic comparison between OM and MP for p known and truncated time series.
+
+```{r-albn-sa-p1-stochastic,fig.height=8}
+sa=biodyns(mlply(runs,
+          function(i,rMult,fixQ,prr){
+            #print(paste(i,rMult,prr))
+                fitBd(window(om[[i]],start=start),
+                      eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult,
+                      rtn=function(x,y) y)}))
+
+u=FLQuants(llply(om,function(x) window(stock(x),start=start)))
+u=FLQuants(llply(u, function(x) rlnorm(100,log(x),.2)))
+
+sa1975p1=biodyns(mlply(seq(length(sa)), function(i) {
+  catch(sa[[i]])=propagate(catch(sa[[i]]),100)
+  fit(sa[[i]],u[[i]])}))
+names(sa1975p1)=names(om)
+
+save(sa1975p1,u,file=paste(dirDat,"sa1975.RData",sep="/"))
+
+ggplot(rbind.fill(cbind(What="MP",plot(FLQuants(llply(sa1975p1,stock)),na.rm=TRUE)$data),
+                  cbind(What="OM",plot(FLQuants(llply(om,      stock)),na.rm=TRUE)$data)))+
+       geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
+       geom_line(aes(year,`50%`,col=What))+
+       facet_wrap(~qname,ncol=2)
+```
+
+**Figure 4** Comparison of stochastic CPUE MP and deterministic OM for p known and truncated time series.
+
+
+```{r-albn-sa1950-p1-det}
+start=1950
+
+priors=ldply(eql,priorFn,p=NULL)
+priors=cbind(priors,mdply(seq(length(om)), 
+              function(i) 
+                data.frame(b0=mean(stock(window(om[[i]],start=start))[,1:10]))))[,-10]
+priors=transform(priors,b0=pmin(b0/k,0.8))
+
+runs=expand.grid(i    =seq(length(om)),
+                 rMult=1.5,
+                 fixQ =!as.logical(TRUE),
+                 prr  ="")
+
+det=mdply(runs,
+          function(i,rMult,fixQ,prr){
+            #print(paste(i,rMult,prr))
+                fitBd(window(om[[i]],start=start),
+                      eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult)})
+ggplot(det)+
+  geom_line(aes(year,omB,group=i))+
+  geom_line(aes(year,mpB,group=i),col="red")
+```
+
+**Figure 5** Deterministic comparison between OM and MP for p known and truncated time series.
+
+```{r-albn-sa1950-p1-stochastic,fig.height=8}
+sa=biodyns(mlply(runs,
+          function(i,rMult,fixQ,prr){
+            #print(paste(i,rMult,prr))
+                fitBd(window(om[[i]],start=start),
+                      eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult,
+                      rtn=function(x,y) y)}))
+
+u=FLQuants(llply(om,function(x) window(stock(x),start=start)))
+u=FLQuants(llply(u, function(x) rlnorm(100,log(x),.2)))
+
+sa1950=biodyns(mlply(seq(length(sa)), function(i) {
+  catch(sa[[i]])=propagate(catch(sa[[i]]),100)
+  fit(sa[[i]],u[[i]])}))
+names(sa1950)=names(om)
+
+save(sa1950,u,file=paste(dirDat,"sa1950.RData",sep="/"))
+
+ggplot(rbind.fill(cbind(What="MP",plot(FLQuants(llply(sa1950,stock)))$data),
+                  cbind(What="OM",plot(FLQuants(llply(om,    stock)))$data)))+
+       geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
+       geom_line(aes(year,`50%`,col=What))+
+       facet_wrap(~qname,ncol=2)
+```
+
+**Figure 6** Comparison of stochastic CPUE MP and deterministic OM for p known and truncated time series.
+
+
+```{r-albn-sa1950-det}
+start=1950
+
+priors=ldply(eql,priorFn,p=1)
+priors=cbind(priors,mdply(seq(length(om)), 
+              function(i) 
+                data.frame(b0=mean(stock(window(om[[i]],start=start))[,1:10]))))[,-10]
+priors=transform(priors,b0=pmin(b0/k,0.8))
+
+runs=expand.grid(i    =seq(length(om)),
+                 rMult=1.5,
+                 fixQ =!as.logical(TRUE),
+                 prr  ="")
+
+det=mdply(runs,
+          function(i,rMult,fixQ,prr){
+            #print(paste(i,rMult,prr))
+                fitBd(window(om[[i]],start=start),
+                      eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult)})
+ggplot(det)+
+  geom_line(aes(year,omB,group=i))+
+  geom_line(aes(year,mpB,group=i),col="red")
+```
+
+**Figure 7** Deterministic comparison between OM and MP for p known and truncated time series.
+
+```{r-albn-sa1950-stochastic,fig.height=8}
+sa=biodyns(mlply(runs,
+          function(i,rMult,fixQ,prr){
+            #print(paste(i,rMult,prr))
+                fitBd(window(om[[i]],start=start),
+                      eql[[i]],priors[i,],fixQ=TRUE,rMult=rMult,
+                      rtn=function(x,y) y)}))
+
+u=FLQuants(llply(om,function(x) window(stock(x),start=start)))
+u=FLQuants(llply(u, function(x) rlnorm(100,log(x),.2)))
+
+sa1950p1=biodyns(mlply(seq(length(sa)), function(i) {
+  catch(sa[[i]])=propagate(catch(sa[[i]]),100)
+  fit(sa[[i]],u[[i]])}))
+names(sa1950p1)=names(om)
+
+save(sa1950p1,u,file=paste(dirDat,"sa1950.RData",sep="/"))
+
+ggplot(rbind.fill(cbind(What="MP",plot(FLQuants(llply(sa1950p1,stock)))$data),
+                  cbind(What="OM",plot(FLQuants(llply(om,      stock)))$data)))+
+       geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
+       geom_line(aes(year,`50%`,col=What))+
+       facet_wrap(~qname,ncol=2)
+```
+
+**Figure 8** Comparison of stochastic CPUE MP and deterministic OM for p known and truncated time series.
+
+
+```{r-albn-sa-prj,fig.height=8,eval=FALSE}
+srDev=rlnorm(100,FLQuant(0,dimnames=list(year=2012:2041)))
+o=fwdWindow(om[["Base"]],end=2041,eql[["Base"]])
+o=fwd(o,f=FLQuant(c(FLBRP:::refpts(eql[["Base"]])["msy","harvest"]*0.7),
+                            dimnames=list(year=2012:2041)),
+                            sr=eql[["Base"]],
+                            sr.residuals=srDev*.6)
+
+names(counterfactual)=names(om)          
+plot(FLQuants(llply(counterfactual[-6],stock))) +
+  facet_wrap(~qname,scale="free")
+
+u=FLQuants(llply(om,function(x) window(stock(x),start=start)))
+u=FLQuants(llply(u, function(x) rlnorm(100,log(x),.2)))
+
+load(paste(dirDat,"sa.RData",sep="/"))
+sa=biodyns(mlply(seq(length(sa)), function(i) {
+  catch(sa[[i]])=propagate(catch(sa[[i]]),100)
+  fit(sa[[i]],u[[i]])}))
+names(sa)=names(om)
+
+ggplot(rbind.fill(cbind(What="MP",plot(FLQuants(llply(sa,stock)))$data),
+                  cbind(What="OM",plot(FLQuants(llply(om,stock)))$data)))+
+       geom_ribbon(aes(year,min=`10%`,max=`90%`,fill=What),alpha=.5)+
+       geom_line(aes(year,`50%`,col=What))+
+       facet_wrap(~qname,ncol=2)
+```
+
+**Figure 9** Comparison of stochastic CPUE MP and deterministic OM with regime shift.
