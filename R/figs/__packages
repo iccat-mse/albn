@@ -1,0 +1,17 @@
+base
+knitr
+lattice
+MASS
+FLCore
+ggplot2
+gridExtra
+reshape2
+ggplotFL
+reshape
+plyr
+kobe
+FLash
+FLBRP
+biodyn
+quadprog
+popbio
