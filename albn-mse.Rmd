@@ -27,7 +27,7 @@ opts_knit$set(width=75)
 
 # Introduction
 
-ICCAT has asked the SCRS to evaluate a Harvest Control Rule (HCR) for North Atlantic albacore using Management Strategy Evaluation. Work started on the [MSE](http://iccat.int/Documents/CVSP/CV070_2014/n_5/CV070052096.pdf)  in 2013 when advice was provided in the form of a [HCR](http://iccat.int/Documents/CVSP/CV070_2014/n_3/CV070031355.pdf) with target and limit reference points. This HCR was then simulation testing using an Operating Model (OM) based on [Multifan-CL](http://iccat.int/Documents/CVSP/CV070_2014/n_3/CV070030717.pdf).
+ICCAT has asked the SCRS to evaluate a Harvest Control Rule (HCR) for North Atlantic albacore using Management Strategy Evaluation. Work started on the [MSE](http://iccat.int/Documents/CVSP/CV070_2014/n_5/CV070052096.pdf)  in 2013 when advice was provided in the form of a [HCR](http://iccat.int/Documents/CVSP/CV070_2014/n_3/CV070031355.pdf) with target and limit reference points. This HCR was then simulation tested using an Operating Model (OM) based on [Multifan-CL](http://iccat.int/Documents/CVSP/CV070_2014/n_3/CV070030717.pdf).
 
 The code used to conduct the MSE is available from a public [github repository](https://github.com/iccat-mse/albn), and uses the [FLR](http://www.flr-project.org/) libaries written in R.
 
