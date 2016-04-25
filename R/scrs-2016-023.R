@@ -557,7 +557,7 @@ ggplot(dat,aes(freq,val,col=X1))+
   xlab("Frequency")+ylab("")
 
 ## ----fig161--------------------------------------------------------------
-source('~/Desktop/flr/git/mp/R/FLBRP-production.R')
+#source('~/Desktop/flr/git/mp/R/FLBRP-production.R')
 
 dat=ldply(eql,function(x) mdply(1:3,function(F)
           as.data.frame(spectrum(iter(mpb:::production(x),F), log = "dB", ci = 0.8,plot=FALSE)[c("freq","spec")])))

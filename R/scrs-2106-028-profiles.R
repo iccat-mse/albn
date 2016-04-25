@@ -51,7 +51,8 @@ load(file.path(dirDat,"fit.RData"))
 
 ## ------------------------------------------------------------------------
 ## K Profile
-source('~/Desktop/flr/git/mp/R/aspic-profile.R')
+#source('~/Desktop/flr/git/mp/R/aspic-profile.R')
+
 setControl(bds[[1]],min=0.25, max=2.25)=params(bds[[1]])
 #bds[[1]]=fit(bds[[1]],cpue[2:3])
 

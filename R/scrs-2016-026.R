@@ -25,7 +25,6 @@ dirDat="/home/laurie/Desktop/scrs-2016/papers/scrs-2016-026-albn-sa/data"
 
 load(paste(dirAlb,"data","om.RData",sep="/"))
 
-source('~/Desktop/flr/git/mp/R/biodyn-oem.R')
 
 options(digits=3)
 

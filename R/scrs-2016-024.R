@@ -138,7 +138,6 @@ ggplot(qq)                                        +
 
 ## ----oem,fig.height=7.25,fig.width=6-------------------------------------
 library(FLife)
-source('~/Desktop/flr/git/biodyn/R/biodyn-oem.R')
 
 stk=as.data.frame(window(stock(om[[1]]),start=1985)/
                     mean(window(stock(om[[1]]),start=1985)))
