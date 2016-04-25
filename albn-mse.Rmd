@@ -29,7 +29,11 @@ opts_knit$set(width=75)
 
 ICCAT has asked the SCRS to evaluate a Harvest Control Rule (HCR) for North Atlantic albacore using Management Strategy Evaluation. Work started on the [MSE](http://iccat.int/Documents/CVSP/CV070_2014/n_5/CV070052096.pdf)  in 2013 when advice was provided in the form of a [HCR](http://iccat.int/Documents/CVSP/CV070_2014/n_3/CV070031355.pdf) with target and limit reference points. This HCR was then simulation tested using an Operating Model (OM) based on [Multifan-CL](http://iccat.int/Documents/CVSP/CV070_2014/n_3/CV070030717.pdf).
 
-The code used to conduct the MSE is available from a public [github repository](https://github.com/iccat-mse/albn), and uses the [FLR](http://www.flr-project.org/) libaries written in R.
+The code used to conduct the MSE is available from a public [github repository](https://github.com/iccat-mse/albn), and uses the mpb package that is part of the [FLR](http://www.flr-project.org/) libaries written in R.
+
+mpb is a package that implements a variety of methods for simulating testing biomass based assessment methods. I.e. to apply the principle "Dont use anything to provide advice unless it has been simulation tested first." see http://www.nap.edu/read/6037/chapter/11
+
+mpb provides tools to  allow biomass based assessment methods to be tested as Management Procedures as part of an MSE. It also has tools to evaluating the robustness of a method using a cross tests, the jack knife and hindcasting. The benefit of evaluating the robustness of a method is that there is no point in running an MSE with a procedure that has been shown not to be robust.
 
 The stock is to be [reassessed](http://iccat.int/Documents/0992-16_ENG.PDF) in 2016 and in light of this new assessment the Commission shall review the results of the MSE conducted so far and make adjustments to the HCRs as required [(Rec-015-04)](http://iccat.int/Documents%5CRecs%5Ccompendiopdf-e%5C2015-04-e.pdf).
 
