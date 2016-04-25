@@ -32,13 +32,15 @@ library(ggplotFL)
 
 library(scales)
 
+##Please change the dirs to those of your own choice
 dirMy="/home/laurie/Desktop/scrs-2016/papers/scrs-2016-027"
 dirInp=file.path(dirMy,"inputs")
 dirDat=file.path(dirMy,"data")
 dirTex=file.path(dirMy,"tex")
 
-dirKobe="http://rscloud.iccat.int/kobe/Inputs"
-dirKobe="/home/laurie/Desktop/rfmos/iccat/kobe/Inputs"
+# dirKobe="http://rscloud.iccat.int/kobe/Inputs"
+# dirKobe="/home/laurie/Desktop/rfmos/iccat/kobe/Inputs"
+dirKobe ="/home/laurie/MEGAsync/mse/albn/inputs/aspic"
 
 #source('~/Desktop/flr/git/mp/R/aspic-constructors.R')
 

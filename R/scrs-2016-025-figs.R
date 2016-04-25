@@ -19,6 +19,8 @@ library(kobe)
 library(mpb)
 library(ggplotFL)
 
+#source('~/Desktop/flr/git/mp/R/biodyn-hcr.R')
+
 ## ------------------------------------------------------------------------
 reflevel<-rbind(data.frame(x=c(-Inf,-Inf,Inf,Inf), y=c(-Inf,  1,  1,-Inf), 
                          fill=as.factor("bottom")),

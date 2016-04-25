@@ -35,6 +35,7 @@ options(digits=4)
 
 theme_set(theme_bw(10))
 
+##Please change the dirs to those of your own choice
 dirMy  ="/home/laurie/Desktop/scrs-2016/papers/scrs-2016-028-albn-prelim"
 dirDat =file.path(dirMy,"data")
 dirInp =file.path(dirMy,"inputs")

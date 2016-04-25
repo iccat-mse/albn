@@ -36,11 +36,12 @@ load(paste(dirDat,"/om.RData",sep=""))
 
 i=0
 
-## ----eval=FALSE----------------------------------------------------------
-## purl("/home/laurie/Desktop/scrs-2016/papers/scrs-2016-024/R/scrs-2016-024-figs.Rmd",
-##      "/home/laurie/Desktop/scrs-2016/papers/scrs-2016-024/R/scrs-2016-024-figs.R")
+## ------------------------------------------------------------------------
+purl("/home/laurie/Desktop/scrs-2016/papers/scrs-2016-024/R/scrs-2016-024-figs.Rmd",
+     "/home/laurie/Desktop/scrs-2016/papers/scrs-2016-024/R/scrs-2016-024-figs.R")
 
-## ----dgs-----------------------------------------------------------------
+
+## ------------------------------------------------------------------------
 dgs=mdply(file.path(dirInp,tolower(names(om)),"plot.rep"),
           function(x) diags(x,"mfcl"))
 
@@ -138,6 +139,7 @@ ggplot(qq)                                        +
 
 ## ----oem,fig.height=7.25,fig.width=6-------------------------------------
 library(FLife)
+#source('~/Desktop/flr/git/biodyn/R/biodyn-oem.R')
 
 stk=as.data.frame(window(stock(om[[1]]),start=1985)/
                     mean(window(stock(om[[1]]),start=1985)))
@@ -147,8 +149,8 @@ set.seed(7889)
 cv    =exp(noise(100,FLQuant(0,dimnames=dimnames(m(object)[1,])),.3,0))
 set.seed(7889)
 ar    =exp(noise( 100,FLQuant(0,dimnames=dimnames(m(object)[1,])),.3,.75))
-vr    =(cv-1)%*%FLQuant(seq(1.25,0.75,length.out=dim(cv)[2]),
-                    dimnames=dimnames(cv[,,,,,1]))+1
+vr    =cv%*%FLQuant(seq(1.25,0.75,length.out=dim(cv)[2]),
+                    dimnames=dimnames(cv[,,,,,1]))
 trend =FLQuant(cumprod(1+rep(0.02,dim(fbar(object))[2])),
                              dimnames=dimnames(fbar(object)))
 hyp   =FLQuant((stock(object)%/%stock(object)[,"1990"])^-0.9)

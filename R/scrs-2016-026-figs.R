@@ -19,12 +19,14 @@ library(mpb)
 library(popbio)
 library(gam)
 
+##Please change the dirs to those of your own choice
 dirAlb="/home/laurie/MEGAsync/mse/albn"
 dirTex="/home/laurie/Desktop/scrs-2016/papers/scrs-2016-026-albn-sa/tex"
 dirDat="/home/laurie/Desktop/scrs-2016/papers/scrs-2016-026-albn-sa/data"
 
 load(paste(dirAlb,"data","om.RData",sep="/"))
 
+#source('~/Desktop/flr/git/mp/R/biodyn-oem.R')
 
 options(digits=3)
 

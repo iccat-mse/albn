@@ -35,17 +35,15 @@ options(digits=4)
 
 theme_set(theme_bw(10))
 
-dirMy  ="/home/laurie/Desktop/scrs-2016/papers/scrs-2016-028-albn-prelim"
-dirDat =file.path(dirMy,"data")
-dirInp =file.path(dirMy,"inputs")
-
-dirKobe="http://rscloud.iccat.int/kobe/Inputs"
-dirKobe="/home/laurie/Desktop/rfmos/iccat/kobe/Inputs"
+##Please change the dirs to those of your own choice
+dirMy   ="/home/laurie/Desktop/scrs-2016/papers/scrs-2016-028"
+dirDat  =file.path(dirMy,"data")
+dirKobe ="/home/laurie/MEGAsync/mse/albn/inputs/aspic"
 
 scen=expand.grid(stk="albn",method="aspic",  run=paste("run",c(1:7),   sep=""),
                               stringsAsFactors=F)
 scen=mdply(scen,function(stk,method,run) 
-  data.frame(dir=paste(dirKobe,stk,"2013",method,run,sep="/")))
+  data.frame(dir=file.path(dirKobe,run)))
 
 ## ----inputs--------------------------------------------------------------
 asp=aspics(file.path(scen$dir,"aspic.inp"))

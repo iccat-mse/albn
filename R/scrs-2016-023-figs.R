@@ -376,8 +376,9 @@ bench=mdply(names(eql), function(OM){
     bdt})
 
 ## ----albn-om-bench3,fig.width=7,fig.height=8-----------------------------
+bench=transform(bench,Scenario=names(om)[X1])
 ggplot(bench)+
-  geom_line(aes(as.numeric(as.numeric(iter)+1929),data,col=X1))+
+  geom_line(aes(as.numeric(as.numeric(iter)+1929),data,col=Scenario))+
   facet_wrap(~quantity,scale="free",ncol=2)+
   xlab("Year")+ylab("")+
   theme_bw(10)
@@ -385,7 +386,7 @@ ggplot(bench)+
 ## ----albn-om-bench4,fig.width=7,fig.height=8-----------------------------
 ggplot(ddply(subset(bench,as.numeric(iter)>30&quantity!="p"),
         .(quantity,X1), transform, data=(data-mean(data))/mean(data)))+
-  geom_line(aes(as.numeric(as.numeric(iter)+1929),data,col=X1))+
+  geom_line(aes(as.numeric(as.numeric(iter)+1929),data,col=Scenario))+
   facet_wrap(~quantity,scale="free",ncol=2)+
   xlab("Year")+ylab("")+
   theme_bw(10)+
@@ -506,7 +507,8 @@ ggplot(dat,aes(freq,val,col=X1))+
   facet_wrap(~.id,ncol=3)+
   theme_bw()+
   theme(legend.position="bottom")+
-  xlab("Frequency")+ylab("")
+  xlab("Frequency")+ylab("")+
+  scale_colour_discrete("FMSY",labels=c("0.1","1","2"))
 
 ## ----fig121--------------------------------------------------------------
 dat=ldply(stks,function(x) mdply(1:3,function(F)
@@ -518,7 +520,8 @@ ggplot(dat,aes(freq,val,col=X1))+
   facet_wrap(~.id,ncol=3)+
   theme_bw()+
   theme(legend.position="bottom")+
-  xlab("Frequency")+ylab("")
+  xlab("Frequency")+ylab("")+
+  scale_colour_discrete("FMSY",labels=c("0.1","1","2"))
 
 ## ----fig131--------------------------------------------------------------
 dat=ldply(stks,function(x) mdply(1:3,function(F)
@@ -530,7 +533,8 @@ ggplot(dat,aes(freq,val,col=X1))+
   facet_wrap(~.id,ncol=3)+
   theme_bw()+
   theme(legend.position="bottom")+
-  xlab("Frequency")+ylab("")
+  xlab("Frequency")+ylab("")+
+  scale_colour_discrete("FMSY",labels=c("0.1","1","2"))
 
 ## ----fig141--------------------------------------------------------------
 dat=ldply(stks,function(x) mdply(1:3,function(F)
@@ -542,7 +546,8 @@ ggplot(dat,aes(freq,val,col=X1))+
   facet_wrap(~.id,ncol=3)+
   theme_bw()+
   theme(legend.position="bottom")+
-  xlab("Frequency")+ylab("")
+  xlab("Frequency")+ylab("")+
+  scale_colour_discrete("FMSY",labels=c("0.1","1","2"))
 
 ## ----fig151--------------------------------------------------------------
 dat=ldply(stks,function(x) mdply(1:3,function(F)
@@ -554,7 +559,8 @@ ggplot(dat,aes(freq,val,col=X1))+
   facet_wrap(~.id,ncol=3)+
   theme_bw()+
   theme(legend.position="bottom")+
-  xlab("Frequency")+ylab("")
+  xlab("Frequency")+ylab("")+
+  scale_colour_discrete("FMSY",labels=c("0.1","1","2"))
 
 ## ----fig161--------------------------------------------------------------
 #source('~/Desktop/flr/git/mp/R/FLBRP-production.R')
@@ -562,11 +568,14 @@ ggplot(dat,aes(freq,val,col=X1))+
 dat=ldply(eql,function(x) mdply(1:3,function(F)
           as.data.frame(spectrum(iter(mpb:::production(x),F), log = "dB", ci = 0.8,plot=FALSE)[c("freq","spec")])))
 
+save(eql,file="/home/laurie/Desktop/temp/eql.RData")
+
 dat=ddply(subset(dat,freq>0.05),.(.id,X1),transform,val=spec/max(spec))
 ggplot(dat,aes(freq,val,col=X1))+
   geom_smooth(se=FALSE)+
   facet_wrap(~.id,ncol=3)+
   theme_bw()+
   theme(legend.position="bottom")+
-  xlab("Frequency")+ylab("")
+  xlab("Frequency")+ylab("")+
+  scale_colour_discrete("FMSY",labels=c("1","2"))
 
